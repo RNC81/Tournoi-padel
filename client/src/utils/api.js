@@ -1,8 +1,13 @@
 import axios from 'axios';
 
-// Client axios configuré — toutes les requêtes passent par /api
+// En dev : le proxy Vite redirige /api → localhost:3001
+// En prod (Render) : VITE_API_URL pointe vers l'URL du backend Render
+const baseURL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL,
   headers: { 'Content-Type': 'application/json' },
 });
 

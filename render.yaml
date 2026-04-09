@@ -1,0 +1,55 @@
+## Configuration Render pour le Tournoi de Padel — Paris Yaar Club
+## Doc : https://render.com/docs/render-yaml
+##
+## Ce fichier déclare 2 services :
+##   1. padel-api   → Web Service Node.js (le backend)
+##   2. padel-client → Static Site React (le frontend)
+
+services:
+  # ─── BACKEND : Web Service Node.js ───────────────────────────────────────
+  - type: web
+    name: padel-api
+    runtime: node
+    plan: free
+    # Render se met en veille après 15min d'inactivité sur le plan gratuit — normal
+    region: frankfurt   # Le plus proche de Paris
+
+    # Commandes exécutées lors du déploiement
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+
+    # Variables d'environnement du backend
+    # Les valeurs marquées "sync: false" doivent être renseignées manuellement
+    # dans le dashboard Render (elles ne sont PAS stockées dans ce fichier)
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false   # ← À saisir dans Render : ta chaîne MongoDB Atlas
+      - key: JWT_SECRET
+        sync: false   # ← À saisir dans Render : une clé secrète longue
+      - key: CLIENT_URL
+        sync: false   # ← À saisir dans Render : https://padel-client.onrender.com
+      # PORT est automatiquement fourni par Render, pas besoin de le définir
+
+  # ─── FRONTEND : Static Site React ────────────────────────────────────────
+  - type: static
+    name: padel-client
+    plan: free
+    region: frankfurt
+
+    # Build du projet React
+    buildCommand: cd client && npm install && npm run build
+    staticPublishPath: ./client/dist
+
+    # Variables d'environnement du frontend (doivent commencer par VITE_)
+    envVars:
+      - key: VITE_API_URL
+        sync: false   # ← À saisir dans Render : https://padel-api.onrender.com
+
+    # Règle SPA : toutes les URLs renvoient vers index.html
+    # Nécessaire pour que React Router fonctionne (sans ça, /inscription donne 404)
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
