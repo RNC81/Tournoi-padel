@@ -57,7 +57,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-900 py-12 px-4">
+    <div className="min-h-screen bg-dark-900 pt-24 pb-12 px-4">
       <div className="max-w-xl mx-auto">
         <Link to="/" className="text-white/40 hover:text-white/70 text-sm mb-8 inline-block transition-colors">
           ← Retour à l'accueil
