@@ -21,13 +21,23 @@ const limiter = rateLimit({
 });
 
 // Vérification de la clé API dans le header x-api-key.
+// Option B : clé DB en priorité, fallback sur process.env.API_KEY.
 // Réponse volontairement vague pour ne pas aider un attaquant.
-const apiKeyAuth = (req, res, next) => {
-  const key = req.headers['x-api-key'];
-  if (!key || key !== process.env.API_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
+const apiKeyAuth = async (req, res, next) => {
+  try {
+    const key = req.headers['x-api-key'];
+    if (!key) return res.status(401).json({ error: 'Unauthorized' });
+
+    const tournament = await Tournament.findOne().select('apiKey').lean();
+    const validKey   = tournament?.apiKey || process.env.API_KEY;
+
+    if (!validKey || key !== validKey) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+  } catch {
+    return res.status(500).json({ error: 'Erreur serveur' });
   }
-  next();
 };
 
 router.use(limiter);
