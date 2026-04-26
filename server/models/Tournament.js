@@ -1,75 +1,70 @@
-const mongoose = require('mongoose');
+const { Schema, model } = require('mongoose');
 
-// Un set de padel : score de chaque équipe dans ce set (ex: 6-3)
-const setSchema = new mongoose.Schema({
-  score1: { type: Number, min: 0 },
-  score2: { type: Number, min: 0 },
-}, { _id: false });
+// Sous-schéma réutilisé pour définir le format d'un set
+// Utilisé dans poolStageFormat, knockoutFormat.*, consolante*.
+const setFormatSchema = {
+  target:          { type: Number }, // 4 ou 6 jeux pour gagner un set
+  maxSets:         { type: Number }, // 1 ou 2 sets pour gagner le match
+  tiebreakatDeuce: { type: Boolean }, // true = tie-break immédiat; false = on continue jusqu'à maxGames
+  maxGames:        { type: Number }, // plafond absolu (5 si target=4, 7 si target=6)
+};
 
-// Un match de poule
-const groupMatchSchema = new mongoose.Schema({
-  team1Id: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true },
-  team2Id: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true },
-  // Scores par set : tableau de 1 à 3 sets (best of 3)
-  sets: { type: [setSchema], default: [] },
-  // Gagnant calculé automatiquement d'après les sets
-  winnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
-  played: { type: Boolean, default: false },
-}, { _id: true });
+const tournamentSchema = new Schema(
+  {
+    name: { type: String, required: true },
 
-// Un groupe (poule)
-const groupSchema = new mongoose.Schema({
-  name: { type: String, required: true }, // "A", "B", "C"...
-  teamIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Team' }],
-  matches: [groupMatchSchema],
-}, { _id: false });
+    status: {
+      type: String,
+      enum: ['setup', 'registration', 'pool_stage', 'knockout', 'consolante', 'finished'],
+      default: 'setup',
+    },
 
-// Un match de bracket (knockout ou consolante)
-const bracketMatchSchema = new mongoose.Schema({
-  round: { type: Number, required: true },      // 0 = 1er tour, 1 = quart, etc.
-  position: { type: Number, required: true },    // Position dans le round (0, 1, 2...)
-  team1Id: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
-  team2Id: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
-  sets: { type: [setSchema], default: [] },
-  winnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
-  played: { type: Boolean, default: false },
-  // Référence aux matchs dont viennent les gagnants (pour avancement auto)
-  feeder1: { round: Number, position: Number },
-  feeder2: { round: Number, position: Number },
-}, { _id: true });
+    maxTeams: { type: Number, default: 100 },
 
-// Document principal : il n'y en a qu'UN seul par tournoi
-const tournamentSchema = new mongoose.Schema({
-  name: { type: String, default: 'Tournoi Paris Yaar Club' },
+    // Phase courante du bracket (ex: "r16", "consolante_qf")
+    // Mis à jour par l'admin quand il lance un nouveau round
+    currentPhase: { type: String, default: null },
 
-  // Phase actuelle du tournoi
-  status: {
-    type: String,
-    enum: ['registration', 'group_stage', 'knockout', 'finished'],
-    default: 'registration',
+    // ── Formats de set ───────────────────────────────────────────────────
+
+    // Format utilisé pour tous les matchs de la phase de poule principale
+    poolStageFormat: setFormatSchema,
+
+    // Format par round du bracket principal.
+    // r32 et r16 sont configurés au lancement de leur round (Option C),
+    // donc pas stockés ici. qf/sf/final servent de mémoire pour pré-remplir
+    // le formulaire admin — la source de vérité reste Match.setFormat.
+    knockoutFormat: {
+      qf:    setFormatSchema,
+      sf:    setFormatSchema,
+      final: setFormatSchema,
+    },
+
+    // Format pour la phase de poule de la consolante
+    consolantePoolFormat: setFormatSchema,
+
+    // Format par round du bracket consolante (même logique que knockoutFormat)
+    consolanteKnockoutFormat: {
+      qf:    setFormatSchema,
+      sf:    setFormatSchema,
+      final: setFormatSchema,
+    },
+
+    // ── Règles de qualification depuis les poules ────────────────────────
+
+    qualificationRules: {
+      // Taille cible du bracket principal (puissance de 2 : 8, 16, 32, 64).
+      // Détermine automatiquement qualifiedPerGroup et wildcardSpots.
+      bracketTarget: { type: Number, default: 32 },
+
+      // Critères de départage en ordre de priorité
+      tiebreaker: {
+        type: [String],
+        default: ['points', 'setDiff', 'setsWon', 'directConfrontation'],
+      },
+    },
   },
+  { timestamps: true }
+);
 
-  // Config
-  maxTeams: { type: Number, default: 100 },
-
-  // Phase de poule
-  groups: [groupSchema],
-
-  // Equipes qualifiées pour le bracket principal
-  qualifiedTeamIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Team' }],
-
-  // Equipes dans la consolante (perdants de poule)
-  consolationTeamIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Team' }],
-
-  // Bracket principal (knockout)
-  knockoutMatches: [bracketMatchSchema],
-
-  // Bracket consolante (même structure)
-  consolationMatches: [bracketMatchSchema],
-
-  // Résultats finaux
-  championId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
-  consolationChampionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
-}, { timestamps: true });
-
-module.exports = mongoose.model('Tournament', tournamentSchema);
+module.exports = model('Tournament', tournamentSchema);

@@ -1,45 +1,36 @@
-const mongoose = require('mongoose');
+const { Schema, model } = require('mongoose');
 
-// Sous-schéma pour chaque joueur d'une équipe (padel = 2 joueurs)
-const playerSchema = new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, trim: true, lowercase: true },
-  phone: { type: String, trim: true, default: '' },
-}, { _id: false });
+const teamSchema = new Schema(
+  {
+    // Nom d'équipe — optionnel : auto-généré "[NomJoueur1] / [NomJoueur2]" si absent
+    name:    { type: String, default: '', trim: true },
+    player1: { type: String, required: true, trim: true },
+    player2: { type: String, required: true, trim: true },
 
-const teamSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-    unique: true,
-    maxlength: 50,
+    // Pays ou ville en texte libre (ex: "Paris", "London", "Île de La Réunion")
+    // La contrainte de doublon dans les poules compare en toLowerCase().trim()
+    country: { type: String, default: '', trim: true },
+
+    // Parcours de l'équipe dans le tournoi
+    // null     → pas encore placée (poules en cours ou terminées sans qualification)
+    // "main"   → qualifiée pour le bracket principal
+    // "consolante" → redirigée vers la consolante
+    // "eliminated" → éliminée définitivement (perdante en consolante)
+    tournamentPath: {
+      type: String,
+      enum: ['main', 'consolante', 'eliminated', null],
+      default: null,
+    },
+
+    // Référence à la poule dans laquelle l'équipe est placée
+    group: { type: Schema.Types.ObjectId, ref: 'Group', default: null },
+
+    registeredAt: { type: Date, default: Date.now },
+
+    // Notes libres pour l'admin (forfaits, remplacement, contexte)
+    notes: { type: String, default: '' },
   },
-  player1: { type: playerSchema, required: true },
-  player2: { type: playerSchema, required: true },
+  { timestamps: true }
+);
 
-  // Groupe auquel l'équipe est affectée (ex: "A", "B", ...) - null avant le tirage
-  groupName: { type: String, default: null },
-
-  // Position finale dans le groupe (1er, 2ème, etc.)
-  groupPosition: { type: Number, default: null },
-
-  // Stats de phase de poule
-  stats: {
-    played: { type: Number, default: 0 },
-    won: { type: Number, default: 0 },
-    lost: { type: Number, default: 0 },
-    setsFor: { type: Number, default: 0 },
-    setsAgainst: { type: Number, default: 0 },
-    points: { type: Number, default: 0 },
-  },
-
-  // Où va l'équipe après les poules
-  phase: {
-    type: String,
-    enum: ['registered', 'group', 'knockout', 'consolation', 'eliminated'],
-    default: 'registered',
-  },
-}, { timestamps: true });
-
-module.exports = mongoose.model('Team', teamSchema);
+module.exports = model('Team', teamSchema);
