@@ -56,6 +56,19 @@ router.post('/', async (req, res) => {
 // ─── GET /api/teams ──────────────────────────────────────────────────────────
 // Lister toutes les équipes (group populé avec _id + name)
 
+// ─── GET /api/teams/count ─────────────────────────────────────────────────────
+// Nombre d'équipes inscrites — utilisé par la homepage pour la barre de progression.
+// Route AVANT /:id pour éviter que "count" soit interprété comme un ObjectId.
+
+router.get('/count', async (req, res) => {
+  try {
+    const count = await Team.countDocuments();
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const teams = await Team.find()
