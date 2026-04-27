@@ -41,6 +41,29 @@ const apiKeyAuth = async (req, res, next) => {
 };
 
 router.use(limiter);
+
+// ─── GET /api/public/config ───────────────────────────────────────────────────
+// Infos de base du tournoi — SANS auth (clé API non requise).
+// Utilisé par la vue joueur pour afficher le nom/statut sans exposer la clé.
+
+router.get('/config', async (req, res) => {
+  try {
+    const tournament = await Tournament.findOne()
+      .select('name status date location')
+      .lean();
+    if (!tournament) return res.json({ name: null, status: null });
+
+    res.json({
+      name:     tournament.name,
+      status:   tournament.status,
+      date:     tournament.date   || null,
+      location: tournament.location || null,
+    });
+  } catch {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 router.use(apiKeyAuth);
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
