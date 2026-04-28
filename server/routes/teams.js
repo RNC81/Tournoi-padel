@@ -49,7 +49,7 @@ router.post('/', async (req, res) => {
 
     res.status(201).json(team);
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 
@@ -106,7 +106,7 @@ router.put('/:id', validateObjectId, async (req, res) => {
     if (!team) return res.status(404).json({ error: 'Équipe introuvable' });
     res.json(team);
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 
@@ -250,7 +250,7 @@ router.post('/import-csv/confirm', async (req, res) => {
 
     res.json(results);
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 
@@ -307,7 +307,7 @@ router.put('/:id/move-group', validateObjectId, async (req, res) => {
 
     res.json({ team, warning });
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 

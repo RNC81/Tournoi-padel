@@ -5,6 +5,7 @@ const Group      = require('../models/Group');
 const Match      = require('../models/Match');
 const Team       = require('../models/Team');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const safeError  = require('../utils/safeError');
 
 const router = express.Router();
 
@@ -56,7 +57,7 @@ router.post('/', async (req, res) => {
 
     res.status(201).json(tournament);
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 
@@ -102,7 +103,7 @@ router.put('/', async (req, res) => {
 
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 
@@ -140,7 +141,7 @@ router.put('/status', async (req, res) => {
 
     res.json({ tournament, warning });
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 
@@ -225,7 +226,7 @@ router.post('/reset/pools', async (req, res) => {
       teamsUpdated:   teamsUpdated.modifiedCount,
     });
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 
@@ -264,7 +265,7 @@ router.post('/reset/bracket', async (req, res) => {
       teamsUpdated:   teamsUpdated.modifiedCount,
     });
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 
@@ -298,7 +299,7 @@ router.post('/reset/all', async (req, res) => {
       teamsUpdated:   teamsUpdated.modifiedCount,
     });
   } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
 });
 

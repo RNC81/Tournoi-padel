@@ -3,13 +3,13 @@ const { Schema, model } = require('mongoose');
 const teamSchema = new Schema(
   {
     // Nom d'équipe — optionnel : auto-généré "[NomJoueur1] / [NomJoueur2]" si absent
-    name:    { type: String, default: '', trim: true },
-    player1: { type: String, required: true, trim: true },
-    player2: { type: String, required: true, trim: true },
+    name:    { type: String, default: '', trim: true, maxlength: 100 },
+    player1: { type: String, required: true, trim: true, maxlength: 100 },
+    player2: { type: String, required: true, trim: true, maxlength: 100 },
 
     // Pays ou ville en texte libre (ex: "Paris", "London", "Île de La Réunion")
     // La contrainte de doublon dans les poules compare en toLowerCase().trim()
-    country: { type: String, default: '', trim: true },
+    country: { type: String, default: '', trim: true, maxlength: 100 },
 
     // Parcours de l'équipe dans le tournoi
     // null     → pas encore placée (poules en cours ou terminées sans qualification)

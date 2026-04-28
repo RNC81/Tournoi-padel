@@ -11,9 +11,9 @@ const setFormatSchema = {
 
 const tournamentSchema = new Schema(
   {
-    name:     { type: String, required: true },
+    name:     { type: String, required: true, trim: true, maxlength: 200 },
     date:     { type: Date },
-    location: { type: String, trim: true },
+    location: { type: String, trim: true, maxlength: 200 },
 
     // Clé API pour les routes publiques (Option B : DB + fallback process.env.API_KEY)
     apiKey: { type: String },

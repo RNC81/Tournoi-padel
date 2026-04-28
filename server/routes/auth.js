@@ -1,9 +1,21 @@
-const express = require('express');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const express    = require('express');
+const jwt        = require('jsonwebtoken');
+const rateLimit  = require('express-rate-limit');
+const User       = require('../models/User');
+const validateObjectId = require('../middleware/validateObjectId');
 const { requireAuth, requireSuperAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Rate limit strict sur le login — 5 tentatives par minute par IP
+const loginLimiter = rateLimit({
+  windowMs:        60 * 1000,
+  max:             5,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message:         { error: 'Trop de tentatives de connexion. Réessayez dans une minute.' },
+  skipSuccessfulRequests: true, // Ne compte que les échecs
+});
 
 // Générer un token JWT pour un utilisateur
 function generateToken(userId) {
@@ -11,7 +23,7 @@ function generateToken(userId) {
 }
 
 // POST /api/auth/login — Connexion admin
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -93,7 +105,7 @@ router.get('/admins', requireAuth, requireSuperAdmin, async (req, res) => {
 });
 
 // PATCH /api/auth/admins/:id/status — Suspendre/réactiver un admin
-router.patch('/admins/:id/status', requireAuth, requireSuperAdmin, async (req, res) => {
+router.patch('/admins/:id/status', requireAuth, requireSuperAdmin, validateObjectId, async (req, res) => {
   try {
     const { status } = req.body;
     if (!['active', 'suspended'].includes(status)) {
@@ -115,7 +127,7 @@ router.patch('/admins/:id/status', requireAuth, requireSuperAdmin, async (req, r
 });
 
 // DELETE /api/auth/admins/:id — Supprimer un sous-admin
-router.delete('/admins/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+router.delete('/admins/:id', requireAuth, requireSuperAdmin, validateObjectId, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
