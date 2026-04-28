@@ -5,6 +5,7 @@ const Group           = require('../models/Group');
 const Match           = require('../models/Match');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { computeStandings }          = require('../utils/standings');
+const { distributeTeams, calcNumGroups } = require('../utils/draw');
 const validateObjectId              = require('../middleware/validateObjectId');
 const safeError                     = require('../utils/safeError');
 
@@ -14,16 +15,6 @@ const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
-
-// Fisher-Yates shuffle
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
 
 // Génère toutes les paires round-robin pour N équipes
 // Retourne un tableau de [idxA, idxB]
@@ -129,28 +120,33 @@ router.post('/draw', async (req, res) => {
       });
     }
 
-    // Calcul de la taille des groupes
+    // Calcul du nombre de groupes
     let { groupSize, numGroups } = req.body;
-    if (!groupSize && !numGroups) {
-      groupSize = teams.length <= 20 ? 4 : 5;
-    }
-    if (numGroups && !groupSize) {
-      groupSize = Math.ceil(teams.length / numGroups);
-    }
-    groupSize = parseInt(groupSize, 10);
-    if (groupSize < 3) {
-      return res.status(400).json({ error: 'groupSize minimum : 3' });
+    let numG;
+    if (numGroups) {
+      numG = parseInt(numGroups, 10);
+    } else {
+      const targetSize = groupSize ? parseInt(groupSize, 10) : (teams.length <= 20 ? 4 : 5);
+      if (targetSize < 3) {
+        return res.status(400).json({ error: 'groupSize minimum : 3' });
+      }
+      numG = calcNumGroups(teams.length, targetSize);
     }
 
-    // Mélange aléatoire
-    const shuffled = shuffle(teams);
-
-    // Distribution en tranches de groupSize (le dernier groupe prend le reste)
-    const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const groupSlices = [];
-    for (let i = 0, g = 0; i < shuffled.length; i += groupSize, g++) {
-      groupSlices.push({ letter: LETTERS[g] || `G${g + 1}`, teams: shuffled.slice(i, i + groupSize) });
+    if (numG < 1) {
+      return res.status(400).json({ error: 'Impossible de créer des groupes avec ces paramètres' });
     }
+
+    // Vérifier que chaque groupe aura au moins 3 équipes
+    const minTeamsPerGroup = Math.floor(teams.length / numG);
+    if (minTeamsPerGroup < 3) {
+      return res.status(400).json({
+        error: `Trop peu d'équipes pour ${numG} groupes (minimum 3 par groupe, vous auriez ${minTeamsPerGroup})`,
+      });
+    }
+
+    // Distribution par pays en serpentin (garantit dispersion pays + aucun groupe < floor(n/numG))
+    const groupSlices = distributeTeams(teams, numG);
 
     // Détection des conflits pays (warn, jamais bloquant).
     // Comparaison normalisée : toLowerCase().trim() pour gérer "Paris" vs "paris", etc.

@@ -16,11 +16,13 @@ function rankColor(rank, total) {
 // ─── MODAL SCORE ─────────────────────────────────────────────────────────────
 
 function ScoreModal({ match, setFormat, onClose, onSaved }) {
-  const maxSets = setFormat?.maxSets ?? 3;
+  // maxSets = nombre de sets pour GAGNER (2 = Best of 3, 3 = Best of 5)
+  const setsToWin    = setFormat?.maxSets ?? 2;
+  const maxTotalSets = setsToWin * 2 - 1;
 
   const initSets = () => {
     const existing = match.sets || [];
-    return Array.from({ length: maxSets }, (_, i) => ({
+    return Array.from({ length: maxTotalSets }, (_, i) => ({
       score1: existing[i]?.score1 ?? '',
       score2: existing[i]?.score2 ?? '',
     }));
@@ -33,6 +35,19 @@ function ScoreModal({ match, setFormat, onClose, onSaved }) {
   const team1Label = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || 'Équipe 1';
   const team2Label = formatTeamName(match.team2?.player1, match.team2?.player2) || match.team2?.name || 'Équipe 2';
 
+  // Calcul dynamique pour révéler le set décisif (S3 en BO3, S5 en BO5…)
+  const decisiveSets = sets.slice(0, setsToWin).filter(s => s.score1 !== '' && s.score2 !== '');
+  let t1Wins = 0, t2Wins = 0;
+  for (const s of decisiveSets) {
+    if (Number(s.score1) > Number(s.score2)) t1Wins++;
+    else if (Number(s.score2) > Number(s.score1)) t2Wins++;
+  }
+  // Révéler le set décisif si : déjà saisi (édition) OU égalité après setsToWin sets
+  const hasDeciderData = sets[setsToWin]?.score1 !== '' || sets[setsToWin]?.score2 !== '';
+  const isTied = decisiveSets.length === setsToWin && t1Wins === t2Wins;
+  const showDecider = maxTotalSets > setsToWin && (hasDeciderData || isTied);
+  const visibleCount = showDecider ? maxTotalSets : setsToWin;
+
   const updateSet = (i, field, val) => {
     setSets(prev => {
       const next = [...prev];
@@ -43,7 +58,7 @@ function ScoreModal({ match, setFormat, onClose, onSaved }) {
 
   const handleSave = async () => {
     // 0 est un score valide — vérification via !== '' et non !value
-    const filledSets = sets.filter(s => s.score1 !== '' && s.score2 !== '');
+    const filledSets = sets.slice(0, visibleCount).filter(s => s.score1 !== '' && s.score2 !== '');
     if (filledSets.length === 0) {
       setError('Saisissez au moins un set joué');
       return;
@@ -95,17 +110,25 @@ function ScoreModal({ match, setFormat, onClose, onSaved }) {
         </div>
 
         <div className="space-y-2 mb-6">
-          {sets.map((set, i) => (
+          {sets.slice(0, visibleCount).map((set, i) => (
             <div key={i} className="grid grid-cols-[1fr_2.5rem_1fr] items-center gap-2">
               <input type="number" min="0" max="99" placeholder="—" value={set.score1}
                 onChange={e => updateSet(i, 'score1', e.target.value)}
                 className="input text-center text-lg font-bold py-2" />
-              <div className="text-white/20 text-center text-sm font-bold">S{i + 1}</div>
+              <div className={`text-center text-sm font-bold ${i === setsToWin ? 'text-primary-400' : 'text-white/20'}`}>
+                S{i + 1}
+              </div>
               <input type="number" min="0" max="99" placeholder="—" value={set.score2}
                 onChange={e => updateSet(i, 'score2', e.target.value)}
                 className="input text-center text-lg font-bold py-2" />
             </div>
           ))}
+          {!showDecider && isTied === false && decisiveSets.length === setsToWin && t1Wins !== t2Wins && (
+            <p className="text-center text-xs text-white/30 pt-1">Vainqueur déterminé — pas de set décisif</p>
+          )}
+          {isTied && !showDecider && (
+            <p className="text-center text-xs text-primary-400 pt-1">Égalité — set décisif à venir</p>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3">

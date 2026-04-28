@@ -23,11 +23,12 @@ const ALL_PHASES = [
 // ─── SCORE MODAL ──────────────────────────────────────────────────────────────
 
 function ScoreModal({ match, onClose, onSaved }) {
-  const maxSets = match.setFormat?.maxSets ?? 3;
+  const setsToWin    = match.setFormat?.maxSets ?? 2;
+  const maxTotalSets = setsToWin * 2 - 1;
 
   const initSets = () => {
     const existing = match.sets || [];
-    return Array.from({ length: maxSets }, (_, i) => ({
+    return Array.from({ length: maxTotalSets }, (_, i) => ({
       score1: existing[i]?.score1 ?? '',
       score2: existing[i]?.score2 ?? '',
     }));
@@ -40,6 +41,18 @@ function ScoreModal({ match, onClose, onSaved }) {
   const t1 = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || '?';
   const t2 = formatTeamName(match.team2?.player1, match.team2?.player2) || match.team2?.name || '?';
 
+  // Révéler le set décisif si égalité après setsToWin sets
+  const decisiveSets = sets.slice(0, setsToWin).filter(s => s.score1 !== '' && s.score2 !== '');
+  let t1Wins = 0, t2Wins = 0;
+  for (const s of decisiveSets) {
+    if (Number(s.score1) > Number(s.score2)) t1Wins++;
+    else if (Number(s.score2) > Number(s.score1)) t2Wins++;
+  }
+  const hasDeciderData = sets[setsToWin]?.score1 !== '' || sets[setsToWin]?.score2 !== '';
+  const isTied = decisiveSets.length === setsToWin && t1Wins === t2Wins;
+  const showDecider = maxTotalSets > setsToWin && (hasDeciderData || isTied);
+  const visibleCount = showDecider ? maxTotalSets : setsToWin;
+
   const updateSet = (i, field, val) => {
     setSets(prev => {
       const next = [...prev];
@@ -49,7 +62,7 @@ function ScoreModal({ match, onClose, onSaved }) {
   };
 
   const handleSave = async () => {
-    const filled = sets.filter(s => s.score1 !== '' && s.score2 !== '');
+    const filled = sets.slice(0, visibleCount).filter(s => s.score1 !== '' && s.score2 !== '');
     if (!filled.length) { setError('Saisissez au moins un set joué'); return; }
     setLoading(true);
     setError('');
@@ -99,12 +112,14 @@ function ScoreModal({ match, onClose, onSaved }) {
         </div>
 
         <div className="space-y-2 mb-6">
-          {sets.map((set, i) => (
+          {sets.slice(0, visibleCount).map((set, i) => (
             <div key={i} className="grid grid-cols-[1fr_2.5rem_1fr] items-center gap-2">
               <input type="number" min="0" max="99" placeholder="—" value={set.score1}
                 onChange={e => updateSet(i, 'score1', e.target.value)}
                 className="input text-center text-lg font-bold py-2" />
-              <div className="text-white/20 text-center text-sm font-bold">S{i + 1}</div>
+              <div className={`text-center text-sm font-bold ${i === setsToWin ? 'text-primary-400' : 'text-white/20'}`}>
+                S{i + 1}
+              </div>
               <input type="number" min="0" max="99" placeholder="—" value={set.score2}
                 onChange={e => updateSet(i, 'score2', e.target.value)}
                 className="input text-center text-lg font-bold py-2" />
