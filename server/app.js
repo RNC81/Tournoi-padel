@@ -34,6 +34,7 @@ app.use('/api/public',     publicRoutes);
 app.use('/api/qrcode',     qrRoutes);
 
 app.get('/api/health', (req, res) => {
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 

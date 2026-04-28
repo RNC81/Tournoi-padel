@@ -32,7 +32,9 @@ function useKeepAlive() {
     fetch(HEALTH_URL).catch(() => {});
 
     const interval = setInterval(() => {
-      fetch(HEALTH_URL).catch(() => {});
+      fetch(HEALTH_URL)
+        .then(() => console.log('[keep-alive] ping ok'))
+        .catch(() => {});
     }, 10 * 60 * 1000); // 10 min
 
     return () => clearInterval(interval);
