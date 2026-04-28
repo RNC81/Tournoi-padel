@@ -35,6 +35,7 @@ app.use('/api/qrcode',     qrRoutes);
 
 app.get('/api/health', (req, res) => {
   res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  console.log('[keep-alive] ping reçu —', new Date().toISOString());
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
