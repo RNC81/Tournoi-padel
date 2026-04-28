@@ -1,72 +1,115 @@
-# Session Notes — Reprendre ici
+# Session Notes — V1 stable
 
-## Dernière mise à jour : 2026-04-09
+## Statut : V1 COMPLÈTE ET DÉPLOYÉE EN PRODUCTION
+## Dernière mise à jour : 2026-04-28
+## Tag : v1.0.0
+
+---
 
 ## URLs de production
-- Frontend : https://idpp-r5hj.onrender.com/
-- Backend  : https://padel-api-dtcf.onrender.com
-- GitHub   : https://github.com/RNC81/Tournoi-padel.git
 
-## État actuel du projet
+| Service | URL |
+|---|---|
+| Frontend | https://idpp-r5hj.onrender.com |
+| Backend | https://padel-api-dtcf.onrender.com |
+| Admin | https://idpp-r5hj.onrender.com/admin |
+| Vue joueur | https://idpp-r5hj.onrender.com/tournoi |
+| GitHub | https://github.com/RNC81/Tournoi-padel |
 
-### Ce qui est FAIT et déployé
-- [x] Backend complet (Node/Express + MongoDB Atlas)
-- [x] Modèles : User, Team, Tournament
-- [x] Auth JWT : super_admin (rayaan) + admins
-- [x] Routes API : /auth, /teams, /tournament, /qrcode
-- [x] Logique groupGenerator.js (poules round-robin, équilibré)
-- [x] Logique bracketGenerator.js (bracket 16 ou 32 dynamique, consolante)
-- [x] Navbar sticky avec menu Connexion (vue joueur / admin)
-- [x] Homepage redesignée style sports editorial (date: 14 & 16 Mai 2026)
-- [x] GuestHomePage : vue joueur read-only avec polling 30s
-- [x] Page inscription équipe (publique)
-- [x] Login admin + Dashboard admin basique
-- [x] render.yaml configuré
+---
 
-### Compte super admin
-- Username : rayaan
-- Mot de passe : PYC2025admin!
-- Créé directement en base MongoDB Atlas
+## Date du tournoi : 13 mai 2026
 
-### Ce qu'il reste à faire (PROCHAINE SESSION)
+Checklist opérationnelle : voir `CHECKLIST_TOURNOI.md`
 
-**Priorité 1 — Initialiser le tournoi**
-- Aller sur https://idpp-r5hj.onrender.com/admin/login
-- Se connecter avec rayaan / PYC2025admin!
-- Cliquer "Initialiser le tournoi" (crée le document Tournament en base)
+---
 
-**Priorité 2 — Pages admin manquantes**
-- AdminTeamsPage : liste des équipes inscrites + suppression
-- AdminGroupsPage : affichage des matchs de poule avec formulaire de saisie des scores
-- AdminUsersPage : gestion des sous-admins (créer, suspendre, supprimer)
+## Ce qui est FAIT (V1 complète)
 
-**Priorité 3 — Affichage bracket public**
-- BracketPage dans GuestHomePage (remplacer le placeholder)
-- Affichage visuel du bracket (arbre d'élimination)
-- Même chose pour la consolante
+### Backend
+- [x] Auth JWT (super_admin + admins, rate limit login 5/min)
+- [x] CRUD équipes + import CSV 2 étapes (parse → confirm)
+- [x] Tirage au sort : serpentin par pays, floor(n/groupSize) groupes, jamais < 3 équipes
+- [x] Matchs round-robin générés automatiquement par poule
+- [x] Saisie/correction scores, winner calculé, propagation bracket
+- [x] Classement temps réel (points, setDiff, setsWon, confrontation directe)
+- [x] Qualification : qualPerGroup + wildcards = bracketTarget exact
+- [x] Seeding bracket : distribution quarts + correcteur swap anti-conflit
+- [x] Bracket consolante (équipes tournamentPath='consolante' uniquement)
+- [x] Reset pools / bracket / all
+- [x] Clé API (DB + fallback env), régénération cryptographique
+- [x] Routes publiques /api/public/* (config sans auth, reste avec apiKey)
+- [x] Audit sécurité complet : safeError, maxlength, validateObjectId partout
 
-**Priorité 4 — Pages admin bracket**
-- AdminBracketPage : saisie des scores du bracket principal
-- AdminConsolationPage : saisie des scores de la consolante
+### Frontend admin
+- [x] Login admin + Dashboard
+- [x] AdminTeamsPage : liste, création, modification, suppression, import CSV
+- [x] AdminGroupsPage : tirage, affichage poules, saisie scores (ScoreModal S3 auto-reveal)
+- [x] AdminBracketPage : génération, saisie scores bracket principal
+- [x] AdminConsolantePage : idem pour la consolante
+- [x] AdminTournamentPage : config, formats de set, statut, clé API, zone dangereuse
 
-**Priorité 5 — Polish final**
-- Responsive mobile à vérifier sur tous les écrans
-- Vérifier VITE_API_URL sur Render (variable d'env du frontend)
-- Tester le flux complet : inscription → poules → bracket
+### Frontend public
+- [x] Homepage landing (date, progression équipes, déroulement, règlement)
+- [x] GuestHomePage /tournoi : onglets Poules / Bracket / Consolante, polling 30s
 
-## Variables d'env Render à vérifier
-Backend (padel-api-dtcf) :
-- MONGODB_URI : mongodb+srv://rnc81:Azertyuiop%402002!@cluster0.ys9gv4v.mongodb.net/padel-tournoi
-- JWT_SECRET : PadelPYC_2025_super_secret_jwt_key_ne_pas_partager
-- CLIENT_URL : https://idpp-r5hj.onrender.com
+### Qualité
+- [x] 171 tests (5 suites Jest) — 0 échec
+  - standings.test.js, draw.test.js, bracket.test.js : unitaires purs
+  - integration.test.js : 5 suites algorithmes métier
+  - api.test.js : 40 tests HTTP Supertest
+- [x] README.md complet (architecture, algos, guide opérationnel)
+- [x] API.md : doc des endpoints /api/public/* pour l'autre équipe dev
+- [x] CHECKLIST_TOURNOI.md : checklist jour J chronologique
 
-Frontend (idpp-r5hj) :
-- VITE_API_URL : https://padel-api-dtcf.onrender.com
+---
 
-## Architecture des fichiers clés
-- server/utils/groupGenerator.js — tirage des poules
-- server/utils/bracketGenerator.js — génération brackets
-- server/models/Tournament.js — schéma principal
-- client/src/pages/HomePage.jsx — landing page (vitrine)
-- client/src/pages/GuestHomePage.jsx — vue joueur read-only
-- client/src/components/Navbar.jsx — navigation globale
+## Compte super admin
+
+- Username : `rayaan`
+- Mot de passe : voir variables d'env Render (ne pas noter ici)
+
+---
+
+## Ce qui reste à faire APRÈS le tournoi
+
+### Priorité haute (utile dès J+1)
+- [ ] **Export CSV résultats** : bouton admin qui génère équipe / joueurs / poule / classement / bracket atteint
+- [ ] **Page résultats finale** : palmarès public (vainqueur, finaliste, vainqueur consolante)
+- [ ] **Archivage** : changer statut → `finished`, désactiver keep-alive
+
+### Améliorations futures (V2)
+- [ ] **Stats post-tournoi** : meilleur ratio de sets, équipe la plus régulière, etc.
+- [ ] **Notifications live** : WebSocket ou SSE pour éviter le polling 30s
+- [ ] **Mode multi-tournois** : plusieurs tournois en DB (actuellement singleton)
+- [ ] **Inscription publique** : formulaire `/inscription` avec validation et gestion liste d'attente
+- [ ] **QR code** : vérifier que `/api/qrcode` retourne bien l'URL /tournoi en prod
+- [ ] **Mobile admin** : l'interface admin est utilisable mais pas optimisée pour téléphone
+- [ ] **Tests E2E** : Playwright ou Cypress sur les flux critiques (tirage → score → classement)
+- [ ] **Logs structurés** : winston ou pino pour avoir des logs en prod (actuellement console.log)
+
+---
+
+## Notes techniques importantes
+
+### Variable d'env à vérifier avant le tournoi
+```
+Render Backend  → VITE_API_URL, CLIENT_URL, JWT_SECRET, API_KEY, MONGODB_URI
+Render Frontend → VITE_API_URL, VITE_PUBLIC_API_KEY
+```
+`VITE_PUBLIC_API_KEY` doit correspondre à la valeur `apiKey` stockée en DB
+(visible dans Admin → Paramètres → Clé API → Révéler).
+
+### Bug connu corrigé en V1
+- 41 équipes / groupSize 5 créait autrefois un 9e groupe à 1 équipe
+  → Corrigé : `calcNumGroups = floor(41/5) = 8`, reste distribué dans les 8
+- Distribution pays était aléatoire
+  → Corrigée : serpentin après tri par pays (`utils/draw.js`)
+- ScoreModal affichait 3 champs même en BO3
+  → Corrigé : S3 révélé automatiquement quand score 1-1
+
+### Sécurité
+- Rate limit login : 5/min/IP (`skipSuccessfulRequests: true`)
+- `safeError` appliqué partout — jamais de stack trace en prod
+- `express.json({ limit: '1mb' })`
+- `maxlength` sur tous les champs string critiques
