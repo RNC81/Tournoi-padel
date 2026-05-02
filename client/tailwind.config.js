@@ -7,7 +7,24 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Palette Paris Yaar Club — vert padel + doré
+        // ── Palette publique — sports editorial light ──────────────────────
+        beige: {
+          DEFAULT: '#f8f7f4',
+          dark:    '#ede9e0',
+        },
+        forest: {
+          DEFAULT: '#2d6a2d',
+          light:   '#3d8c3d',
+          dark:    '#1e4a1e',
+          50:      '#f0f7f0',
+          100:     '#d4e8d4',
+        },
+        lime: {
+          DEFAULT: '#c8e832',
+          dark:    '#aac520',
+          light:   '#d8f050',
+        },
+        // ── Palette admin — conservée intacte ────────────────────────────
         primary: {
           50:  '#f0fdf4',
           100: '#dcfce7',
@@ -28,7 +45,7 @@ export default {
           800: '#1a1a2e',
           700: '#16213e',
           600: '#0f3460',
-        }
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

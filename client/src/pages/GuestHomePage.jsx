@@ -1,6 +1,7 @@
 // GuestHomePage — Vue joueur, lecture seule, accessible sans connexion.
 // Appelle /api/public/* avec la clé API depuis VITE_PUBLIC_API_KEY (env Render).
 // Polling toutes les 30s sur tous les endpoints.
+// Thème : sports editorial clair (beige / forest / lime).
 
 import { useState, useCallback } from 'react';
 import publicApi from '../utils/publicApi';
@@ -29,33 +30,35 @@ const CONSOLANTE_PHASES = ['consolante_r32', 'consolante_r16', 'consolante_qf', 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
 export default function GuestHomePage() {
-  const [activeTab,  setActiveTab]  = useState('groupes');
-  const [config,     setConfig]     = useState(null);
-  const [groups,     setGroups]     = useState([]);
-  const [bracket,    setBracket]    = useState({});
-  const [consolante, setConsolante] = useState({});
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [apiError,   setApiError]   = useState(false);
+  const [activeTab,   setActiveTab]   = useState('groupes');
+  const [config,      setConfig]      = useState(null);
+  const [tournament,  setTournament]  = useState(null); // pour qualificationRules
+  const [groups,      setGroups]      = useState([]);
+  const [bracket,     setBracket]     = useState({});
+  const [consolante,  setConsolante]  = useState({});
+  const [lastUpdate,  setLastUpdate]  = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [apiError,    setApiError]    = useState(false);
 
-  // Charge les 4 endpoints en parallèle — allSettled pour ne pas tout bloquer
+  // Charge les 5 endpoints en parallèle — allSettled pour ne pas tout bloquer
   // si un seul échoue (ex: bracket pas encore généré)
   const fetchAll = useCallback(async () => {
-    // /config n'a pas besoin de clé API — on peut toujours l'appeler
-    const [cfgRes, grpRes, bktRes, conRes] = await Promise.allSettled([
+    const [cfgRes, trnRes, grpRes, bktRes, conRes] = await Promise.allSettled([
       publicApi.get('/config'),
+      publicApi.get('/tournament'),
       publicApi.get('/groups', { params: { phase: 'pool' } }),
       publicApi.get('/bracket'),
       publicApi.get('/bracket/consolante'),
     ]);
 
     if (cfgRes.status === 'fulfilled') setConfig(cfgRes.value.data);
+    if (trnRes.status === 'fulfilled') setTournament(trnRes.value.data);
     if (grpRes.status === 'fulfilled') setGroups(grpRes.value.data || []);
     if (bktRes.status === 'fulfilled') setBracket(bktRes.value.data || {});
     if (conRes.status === 'fulfilled') setConsolante(conRes.value.data || {});
 
-    // Erreur API si même /config échoue (clé manquante ou serveur down)
-    const allFailed = [cfgRes, grpRes, bktRes, conRes].every(r => r.status === 'rejected');
+    // Erreur totale si /config et /tournament échouent tous les deux
+    const allFailed = [cfgRes, trnRes, grpRes, bktRes, conRes].every(r => r.status === 'rejected');
     setApiError(allFailed);
     setLastUpdate(new Date());
     setLoading(false);
@@ -63,11 +66,15 @@ export default function GuestHomePage() {
 
   usePolling(fetchAll, 30000, true);
 
-  // Tournoi "démarré" si on a des groupes ou des matchs de bracket
-  const hasGroups    = groups.length > 0;
-  const hasBracket   = Object.keys(bracket).length > 0;
+  const hasGroups     = groups.length > 0;
+  const hasBracket    = Object.keys(bracket).length > 0;
   const hasConsolante = Object.keys(consolante).length > 0;
-  const hasStarted   = config?.status && config.status !== 'setup' && config.status !== 'registration';
+  const hasStarted    = config?.status && config.status !== 'setup' && config.status !== 'registration';
+
+  // Nombre de qualifiés par groupe : Math.floor(bracketTarget / nbGroupes)
+  // Défaut : 2 si les données ne sont pas encore chargées
+  const bracketTarget = tournament?.qualificationRules?.bracketTarget ?? 32;
+  const qualPerGroup  = hasGroups ? Math.max(1, Math.floor(bracketTarget / groups.length)) : 2;
 
   const tabs = [
     { id: 'groupes',    label: 'Poules',     active: hasGroups    },
@@ -76,10 +83,10 @@ export default function GuestHomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-dark-900 pt-16">
+    <div className="min-h-screen bg-beige pt-16">
 
       {/* ── Barre d'onglets sticky ── */}
-      <div className="border-b border-white/10 bg-dark-800/60 backdrop-blur-sm sticky top-16 z-40">
+      <div className="border-b border-forest/10 bg-beige/90 backdrop-blur-sm sticky top-16 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-12">
 
@@ -91,14 +98,14 @@ export default function GuestHomePage() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`relative px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
                     activeTab === tab.id
-                      ? 'bg-primary-500/20 text-primary-400'
-                      : 'text-white/40 hover:text-white/70'
+                      ? 'bg-forest/10 text-forest'
+                      : 'text-forest/40 hover:text-forest/70'
                   }`}
                 >
                   {tab.label}
                   {/* Point vert si données disponibles */}
                   {tab.active && (
-                    <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />
+                    <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-lime" />
                   )}
                 </button>
               ))}
@@ -106,8 +113,8 @@ export default function GuestHomePage() {
 
             {/* Indicateur "Mis à jour à HH:MM" */}
             {lastUpdate && (
-              <div className="flex items-center gap-2 text-xs text-white/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse shrink-0" />
+              <div className="flex items-center gap-2 text-xs text-forest/40">
+                <span className="w-1.5 h-1.5 rounded-full bg-lime animate-pulse shrink-0" />
                 <span>
                   Mis à jour à {lastUpdate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                 </span>
@@ -125,7 +132,7 @@ export default function GuestHomePage() {
           <ErrorState />
         ) : activeTab === 'groupes' ? (
           hasGroups
-            ? <GroupsTab groups={groups} />
+            ? <GroupsTab groups={groups} qualPerGroup={qualPerGroup} />
             : <NotStartedState label="poules" config={config} hasStarted={hasStarted} />
         ) : activeTab === 'bracket' ? (
           hasBracket
@@ -145,8 +152,8 @@ export default function GuestHomePage() {
 
 function LoadingState() {
   return (
-    <div className="flex flex-col items-center justify-center py-32 text-white/30">
-      <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-4" />
+    <div className="flex flex-col items-center justify-center py-32 text-forest/30">
+      <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin mb-4" />
       <p className="text-sm">Chargement du tournoi...</p>
     </div>
   );
@@ -155,8 +162,8 @@ function LoadingState() {
 function ErrorState() {
   return (
     <div className="flex flex-col items-center justify-center py-32 text-center">
-      <p className="text-white/40 text-sm mb-2">Impossible de contacter le serveur.</p>
-      <p className="text-white/20 text-xs">La page se rafraîchit automatiquement toutes les 30 secondes.</p>
+      <p className="text-forest/40 text-sm mb-2">Impossible de contacter le serveur.</p>
+      <p className="text-forest/25 text-xs">La page se rafraîchit automatiquement toutes les 30 secondes.</p>
     </div>
   );
 }
@@ -164,22 +171,32 @@ function ErrorState() {
 function NotStartedState({ label, config, hasStarted }) {
   return (
     <div className="flex flex-col items-center justify-center py-28 text-center">
-      <div className="text-5xl mb-5">🎾</div>
-      <h2 className="font-display font-black text-2xl text-white mb-3">
+      {/* Balle padel stylisée en SVG */}
+      <div
+        className="w-14 h-14 rounded-full mb-5 flex items-center justify-center"
+        style={{ background: '#c8e832' }}
+      >
+        <svg className="w-8 h-8 text-forest" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" strokeWidth="1.5"/>
+          <path d="M3.5 8.5 Q12 5 20.5 8.5" strokeWidth="1.5" fill="none"/>
+          <path d="M3.5 15.5 Q12 19 20.5 15.5" strokeWidth="1.5" fill="none"/>
+        </svg>
+      </div>
+      <h2 className="font-display font-black text-2xl text-forest mb-3">
         {hasStarted ? `Les ${label} ne sont pas encore disponibles` : 'Le tournoi n\'a pas encore commencé'}
       </h2>
       {config?.date && (
-        <p className="text-white/40 text-sm mb-2">
-          Date : <span className="text-primary-400 font-semibold">
+        <p className="text-forest/50 text-sm mb-2">
+          Date : <span className="text-forest font-semibold">
             {new Date(config.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
           </span>
         </p>
       )}
       {config?.location && (
-        <p className="text-white/40 text-sm mb-6">{config.location}</p>
+        <p className="text-forest/50 text-sm mb-6">{config.location}</p>
       )}
-      <div className="flex items-center gap-2 text-xs text-white/20 mt-4">
-        <span className="w-1.5 h-1.5 rounded-full bg-white/20 animate-pulse" />
+      <div className="flex items-center gap-2 text-xs text-forest/30 mt-4">
+        <span className="w-1.5 h-1.5 rounded-full bg-lime animate-pulse" />
         Cette page se rafraîchit automatiquement
       </div>
     </div>
@@ -188,16 +205,25 @@ function NotStartedState({ label, config, hasStarted }) {
 
 // ─── Onglet Groupes ───────────────────────────────────────────────────────────
 
-function GroupsTab({ groups }) {
-  // Tri alphabétique
+function GroupsTab({ groups, qualPerGroup }) {
   const sorted = [...groups].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="space-y-6">
-      <p className="text-white/40 text-sm">{groups.length} groupes · Classements en temps réel</p>
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <p className="text-forest/50 text-sm">
+          {groups.length} groupes · {qualPerGroup} qualifié{qualPerGroup > 1 ? 's' : ''} par groupe
+        </p>
+        <div className="flex items-center gap-3 text-xs text-forest/40">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-forest/10 border border-forest/20" />
+            Qualifié
+          </span>
+        </div>
+      </div>
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {sorted.map(group => (
-          <GroupCard key={group._id} group={group} />
+          <GroupCard key={group._id} group={group} qualPerGroup={qualPerGroup} />
         ))}
       </div>
     </div>
@@ -206,12 +232,11 @@ function GroupsTab({ groups }) {
 
 // ─── GroupCard : classement + matchs lazy-loaded ──────────────────────────────
 
-function GroupCard({ group }) {
+function GroupCard({ group, qualPerGroup }) {
   const [showMatches, setShowMatches] = useState(false);
-  const [matches,     setMatches]     = useState(null);  // null = pas encore chargé
+  const [matches,     setMatches]     = useState(null);
   const [loadingM,    setLoadingM]    = useState(false);
 
-  // Total matchs joués (depuis standings — approximation : 1 match = 2 équipes)
   const totalTeams  = group.teams?.length || 0;
   const maxMatches  = (totalTeams * (totalTeams - 1)) / 2;
   const playedCount = group.standings?.reduce((acc, s) => acc + (s.played || 0), 0) / 2 | 0;
@@ -220,7 +245,6 @@ function GroupCard({ group }) {
     if (showMatches) { setShowMatches(false); return; }
     if (matches !== null) { setShowMatches(true); return; }
 
-    // Chargement lazy : détail du groupe avec les matchs
     setLoadingM(true);
     try {
       const res = await publicApi.get(`/groups/${group._id}`);
@@ -234,16 +258,16 @@ function GroupCard({ group }) {
   };
 
   return (
-    <div className="bg-dark-800 border border-white/10 rounded-2xl overflow-hidden">
+    <div className="bg-white border border-forest/12 rounded-2xl overflow-hidden shadow-sm">
 
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/8">
-        <div className="w-9 h-9 bg-primary-500/15 rounded-xl flex items-center justify-center font-display font-black text-primary-400 text-lg shrink-0">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-forest/8 bg-forest-50">
+        <div className="w-9 h-9 bg-forest/10 rounded-xl flex items-center justify-center font-display font-black text-forest text-lg shrink-0">
           {group.name}
         </div>
         <div>
-          <p className="font-semibold text-white text-sm">Groupe {group.name}</p>
-          <p className="text-white/30 text-xs">{totalTeams} équipes · {playedCount}/{maxMatches} matchs joués</p>
+          <p className="font-semibold text-forest text-sm">Groupe {group.name}</p>
+          <p className="text-forest/40 text-xs">{totalTeams} équipes · {playedCount}/{maxMatches} matchs joués</p>
         </div>
       </div>
 
@@ -251,29 +275,42 @@ function GroupCard({ group }) {
       <div className="px-3 py-2 space-y-1">
         {group.standings?.map((s, i) => {
           const teamName = formatTeamName(s.team?.player1, s.team?.player2) || s.team?.name || '—';
-          const isQual   = i < 2; // indicatif — l'admin décide du nombre réel de qualifiés
+          // Les `qualPerGroup` premières équipes sont surlignées comme qualifiées
+          const isQual   = i < qualPerGroup;
 
           return (
             <div
               key={s.teamId}
-              className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm ${
-                isQual ? 'bg-primary-500/8 border border-primary-500/15' : 'bg-white/3'
+              className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors ${
+                isQual
+                  ? 'bg-forest/8 border border-forest/15'
+                  : 'bg-forest/3 hover:bg-forest/5'
               }`}
             >
               {/* Rang */}
-              <span className={`w-4 text-center text-xs font-bold shrink-0 ${isQual ? 'text-primary-400' : 'text-white/25'}`}>
+              <span className={`w-4 text-center text-xs font-bold shrink-0 ${isQual ? 'text-forest' : 'text-forest/25'}`}>
                 {i + 1}
               </span>
 
+              {/* Barre lime pour les qualifiés */}
+              {isQual && (
+                <span
+                  className="w-0.5 h-4 rounded-full shrink-0"
+                  style={{ background: '#c8e832' }}
+                />
+              )}
+
               {/* Nom de l'équipe */}
-              <span className="flex-1 font-medium text-white text-xs truncate">{teamName}</span>
+              <span className={`flex-1 font-medium text-xs truncate ${isQual ? 'text-forest' : 'text-forest/60'}`}>
+                {teamName}
+              </span>
 
               {/* Stats */}
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-white/30 text-xs font-mono" title="Sets pour/contre">
+                <span className="text-forest/35 text-xs font-mono" title="Sets pour/contre">
                   {s.setsFor ?? 0}/{s.setsAgainst ?? 0}
                 </span>
-                <span className={`text-xs font-bold tabular-nums w-8 text-right ${isQual ? 'text-primary-400' : 'text-white/60'}`}>
+                <span className={`text-xs font-bold tabular-nums w-8 text-right ${isQual ? 'text-forest' : 'text-forest/50'}`}>
                   {s.points ?? 0} pts
                 </span>
               </div>
@@ -286,7 +323,7 @@ function GroupCard({ group }) {
       <button
         onClick={handleToggleMatches}
         disabled={loadingM}
-        className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 border-t border-white/8 text-xs text-white/30 hover:text-white/60 transition-colors disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 border-t border-forest/8 text-xs text-forest/35 hover:text-forest/60 hover:bg-forest-50 transition-colors disabled:opacity-50"
       >
         {loadingM ? (
           <span>Chargement...</span>
@@ -297,7 +334,7 @@ function GroupCard({ group }) {
               className={`w-3 h-3 transition-transform ${showMatches ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
             </svg>
           </>
         )}
@@ -305,9 +342,9 @@ function GroupCard({ group }) {
 
       {/* Liste des matchs */}
       {showMatches && matches !== null && (
-        <div className="border-t border-white/8 px-3 py-2 space-y-1.5">
+        <div className="border-t border-forest/8 px-3 py-2 space-y-1.5 bg-forest-50">
           {matches.length === 0 ? (
-            <p className="text-white/25 text-xs text-center py-2">Aucun match enregistré</p>
+            <p className="text-forest/30 text-xs text-center py-2">Aucun match enregistré</p>
           ) : (
             matches.map(match => <MatchRow key={match._id} match={match} />)
           )}
@@ -317,7 +354,7 @@ function GroupCard({ group }) {
   );
 }
 
-// ─── MatchRow : une ligne de résultat de match ────────────────────────────────
+// ─── MatchRow ─────────────────────────────────────────────────────────────────
 
 function MatchRow({ match }) {
   const t1Name = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || '—';
@@ -328,50 +365,52 @@ function MatchRow({ match }) {
 
   if (!match.played) {
     return (
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 px-2 py-1.5 rounded-lg bg-white/3 text-xs">
-        <span className="text-white/40 truncate">{t1Name}</span>
-        <span className="text-white/15 font-mono">vs</span>
-        <span className="text-white/40 truncate text-right">{t2Name}</span>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 px-2 py-1.5 rounded-lg bg-forest/3 text-xs">
+        <span className="text-forest/40 truncate">{t1Name}</span>
+        <span className="text-forest/20 font-mono">vs</span>
+        <span className="text-forest/40 truncate text-right">{t2Name}</span>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 px-2 py-1.5 rounded-lg bg-white/5 text-xs">
-      <span className={`truncate font-medium ${t1Wins > t2Wins ? 'text-white' : 'text-white/35'}`}>{t1Name}</span>
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 px-2 py-1.5 rounded-lg bg-white text-xs border border-forest/8">
+      <span className={`truncate font-medium ${t1Wins > t2Wins ? 'text-forest font-semibold' : 'text-forest/35'}`}>
+        {t1Name}
+      </span>
       <div className="text-center shrink-0 px-1">
         {match.sets?.map((s, i) => (
-          <span key={i} className="font-mono text-white/40">
-            {i > 0 && <span className="text-white/15 mx-0.5">·</span>}
-            <span className={s.score1 > s.score2 ? 'text-white/80' : ''}>{s.score1}</span>
-            <span className="text-white/20">-</span>
-            <span className={s.score2 > s.score1 ? 'text-white/80' : ''}>{s.score2}</span>
+          <span key={i} className="font-mono text-forest/40">
+            {i > 0 && <span className="text-forest/20 mx-0.5">·</span>}
+            <span className={s.score1 > s.score2 ? 'text-forest/80' : ''}>{s.score1}</span>
+            <span className="text-forest/20">-</span>
+            <span className={s.score2 > s.score1 ? 'text-forest/80' : ''}>{s.score2}</span>
           </span>
         ))}
       </div>
-      <span className={`truncate text-right font-medium ${t2Wins > t1Wins ? 'text-white' : 'text-white/35'}`}>{t2Name}</span>
+      <span className={`truncate text-right font-medium ${t2Wins > t1Wins ? 'text-forest font-semibold' : 'text-forest/35'}`}>
+        {t2Name}
+      </span>
     </div>
   );
 }
 
-// ─── Onglet Bracket (principal ou consolante) ─────────────────────────────────
+// ─── Onglet Bracket ───────────────────────────────────────────────────────────
 
 function BracketTab({ data, phases, isFinalPhase, accent = 'primary' }) {
-  // Ne garder que les phases qui ont des matchs
   const activePhases = phases.filter(p => data[p]?.length > 0);
 
   if (activePhases.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
-        <p className="text-white/40 text-sm">Le bracket n'est pas encore disponible.</p>
+        <p className="text-forest/40 text-sm">Le bracket n'est pas encore disponible.</p>
       </div>
     );
   }
 
-  // Hauteur minimale basée sur le plus grand round (premier round)
-  const firstPhase  = activePhases[0];
-  const maxMatches  = data[firstPhase]?.length || 1;
-  const minHeight   = Math.max(maxMatches * 72, 300);
+  const firstPhase = activePhases[0];
+  const maxMatches = data[firstPhase]?.length || 1;
+  const minHeight  = Math.max(maxMatches * 72, 300);
 
   return (
     <div className="overflow-x-auto pb-4">
@@ -394,21 +433,19 @@ function BracketTab({ data, phases, isFinalPhase, accent = 'primary' }) {
 // ─── BracketRound : une colonne de matchs ─────────────────────────────────────
 
 function BracketRound({ phase, matches, isFinalPhase, accent, containerHeight }) {
-  const accentColor = isFinalPhase
-    ? (accent === 'violet' ? 'text-violet-400' : 'text-yellow-400')
-    : 'text-white/30';
+  const labelColor = isFinalPhase
+    ? (accent === 'violet' ? 'text-violet-600' : 'text-lime-dark font-bold')
+    : 'text-forest/40';
 
   return (
     <div className="flex flex-col w-52 shrink-0">
-      {/* Label de la phase */}
-      <div className={`text-center text-xs uppercase tracking-widest mb-3 font-medium ${accentColor}`}>
+      <div className={`text-center text-xs uppercase tracking-widest mb-3 font-medium ${labelColor}`}>
         {ROUND_LABELS[phase]}
-        <span className="text-white/20 ml-1.5 font-normal normal-case tracking-normal">
+        <span className="text-forest/25 ml-1.5 font-normal normal-case tracking-normal">
           ({matches.length})
         </span>
       </div>
 
-      {/* Matchs distribués verticalement */}
       <div
         className="flex flex-col justify-around flex-1"
         style={{ minHeight: containerHeight }}
@@ -425,7 +462,7 @@ function BracketRound({ phase, matches, isFinalPhase, accent, containerHeight })
   );
 }
 
-// ─── ReadOnlyMatchCard : carte de match sans interaction ──────────────────────
+// ─── ReadOnlyMatchCard ────────────────────────────────────────────────────────
 
 function ReadOnlyMatchCard({ match, isFinal, accent = 'primary' }) {
   const isByeMatch = match.played && (!match.team1 || !match.team2);
@@ -438,24 +475,27 @@ function ReadOnlyMatchCard({ match, isFinal, accent = 'primary' }) {
   const t1Win  = isPlayed && winner && winner === t1id;
   const t2Win  = isPlayed && winner && winner === t2id;
 
-  const finalBorder  = accent === 'violet' ? 'border-violet-500/40 bg-violet-500/5' : 'border-yellow-500/40 bg-yellow-500/5';
+  // Bordures spéciales pour les finales
+  const finalBorder = accent === 'violet'
+    ? 'border-violet-300 bg-violet-50'
+    : 'border-lime/60 bg-lime/5';
 
   return (
     <div className={`rounded-xl border overflow-hidden ${
       isFinal    ? finalBorder
-      : isPlayed ? 'border-white/10 bg-white/3'
-      : isPending? 'border-white/5 bg-dark-800/50 opacity-50'
-                 : 'border-primary-500/20 bg-dark-700'
+      : isPlayed ? 'border-forest/12 bg-white'
+      : isPending? 'border-forest/6 bg-beige opacity-50'
+                 : 'border-forest/20 bg-forest-50'
     }`}>
       <TeamSlot match={match} side={1} isWinner={t1Win} isLoser={isPlayed && !t1Win && !!match.team1} />
       {isPlayed && match.sets?.length > 0 && (
-        <div className="px-3 py-1 flex items-center gap-1.5 border-y border-white/5 bg-white/3">
+        <div className="px-3 py-1 flex items-center gap-1.5 border-y border-forest/8 bg-forest/3">
           {match.sets.map((s, i) => (
-            <span key={i} className="text-xs font-mono text-white/40">
-              {i > 0 && <span className="text-white/15 mr-1.5">·</span>}
-              <span className={s.score1 > s.score2 ? 'text-white/80' : ''}>{s.score1}</span>
-              <span className="text-white/20">-</span>
-              <span className={s.score2 > s.score1 ? 'text-white/80' : ''}>{s.score2}</span>
+            <span key={i} className="text-xs font-mono text-forest/40">
+              {i > 0 && <span className="text-forest/20 mr-1.5">·</span>}
+              <span className={s.score1 > s.score2 ? 'text-forest/80' : ''}>{s.score1}</span>
+              <span className="text-forest/20">-</span>
+              <span className={s.score2 > s.score1 ? 'text-forest/80' : ''}>{s.score2}</span>
             </span>
           ))}
         </div>
@@ -465,27 +505,23 @@ function ReadOnlyMatchCard({ match, isFinal, accent = 'primary' }) {
   );
 }
 
-// ─── TeamSlot : un côté d'un match de bracket ────────────────────────────────
+// ─── TeamSlot ─────────────────────────────────────────────────────────────────
 
 function TeamSlot({ match, side, isWinner, isLoser }) {
-  const team = side === 1 ? match.team1 : match.team2;
+  const team       = side === 1 ? match.team1 : match.team2;
   const isByeMatch = match.played && (!match.team1 || !match.team2);
-  const isBye = isByeMatch && !team;
+  const isBye      = isByeMatch && !team;
 
-  if (isBye) {
-    return <div className="px-3 py-1.5 text-xs text-white/20 italic">BYE</div>;
-  }
-  if (!team) {
-    return <div className="px-3 py-1.5 text-xs text-white/15">—</div>;
-  }
+  if (isBye)   return <div className="px-3 py-1.5 text-xs text-forest/20 italic">BYE</div>;
+  if (!team)   return <div className="px-3 py-1.5 text-xs text-forest/20">—</div>;
 
   const label = formatTeamName(team.player1, team.player2) || team.name;
 
   return (
     <div className={`px-3 py-1.5 text-xs truncate ${
-      isWinner ? 'text-white font-semibold'
-      : isLoser ? 'text-white/30 line-through'
-      : 'text-white/70'
+      isWinner ? 'text-forest font-semibold'
+      : isLoser ? 'text-forest/30 line-through'
+      : 'text-forest/65'
     }`}>
       {label}
     </div>

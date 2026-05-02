@@ -7,7 +7,9 @@
 
 @layer base {
   body {
-    @apply bg-dark-900 text-white font-sans;
+    /* Pas de couleur de fond par défaut — chaque layout définit la sienne.
+       Les pages publiques sont claires (beige), les pages admin sont sombres. */
+    @apply font-sans;
     margin: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
