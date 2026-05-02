@@ -90,7 +90,8 @@ function FullPageCourt() {
 
 // ─── BALLE ANIMÉE (fixed, scroll-driven) ─────────────────────────────────────
 // Trajectoire Bézier, rotation, compression à l'impact, traîne, ombre.
-// Toutes les mises à jour passent par des refs DOM — zéro re-render React.
+// Architecture : handler scroll → target seulement / RAF loop → lerp + DOM.
+// Zéro re-render React, zéro jitter.
 function AnimatedBall() {
   const { scrollYProgress } = useScroll();
 
@@ -102,34 +103,112 @@ function AnimatedBall() {
 
   // État interne mutable — aucune liaison avec le cycle de rendu React
   const iv = useRef({
+    targetX:  50, targetY:  8,   // mis à jour par le handler scroll
+    currentX: 50, currentY: 8,   // lerpés dans le RAF loop
+    prevX:    50, prevY:    8,   // frame précédente (calcul vitesse)
     rotation:     0,
     lastT:        0,
-    lastX:        50,
-    lastY:        8,
     lastImpactAt: -1,
+    pendingImpact: false,        // impact détecté → RAF l'applique
+    arcH:         0,
     trail: [{ x: 50, y: 8 }, { x: 50, y: 8 }, { x: 50, y: 8 }],
+    rafId: null,
   });
 
   useEffect(() => {
     const TRAIL_REFS  = [trail1Ref, trail2Ref, trail3Ref];
     const TRAIL_SIZES = [14, 10, 7];       // px
     const TRAIL_OPAC  = [0.4, 0.2, 0.08]; // opacité quand visible
+    const LERP = 0.12;                     // facteur de lissage
 
+    // ── RAF loop : lerp + toutes les écritures DOM ───────────────────────────
+    function rafLoop() {
+      const state = iv.current;
+
+      state.prevX = state.currentX;
+      state.prevY = state.currentY;
+
+      // Lissage vers la cible
+      state.currentX += (state.targetX - state.currentX) * LERP;
+      state.currentY += (state.targetY - state.currentY) * LERP;
+
+      const vw    = window.innerWidth;
+      const vh    = window.innerHeight;
+      const dx    = (state.currentX - state.prevX) * vw / 100;
+      const dy    = (state.currentY - state.prevY) * vh / 100;
+      const speed = Math.sqrt(dx * dx + dy * dy);
+      const distToTarget =
+        Math.abs(state.targetX - state.currentX) +
+        Math.abs(state.targetY - state.currentY);
+
+      // Seuil minimum — inutile de redessiner si quasi immobile
+      if (speed > 0.02 || distToTarget > 0.05) {
+        state.rotation += speed * 5;
+
+        // Traîne : lag par rapport à la frame précédente
+        state.trail = [
+          { x: state.prevX, y: state.prevY },
+          state.trail[0],
+          state.trail[1],
+        ];
+
+        const shadowW    = 0.55 + state.arcH * 1.1;
+        const shadowOpac = 0.05 + state.arcH * 0.10;
+
+        if (ballRef.current) {
+          ballRef.current.style.left = `${state.currentX}%`;
+          ballRef.current.style.top  = `${state.currentY}vh`;
+
+          if (state.pendingImpact) {
+            state.pendingImpact = false;
+            // Compression via Web Animations API — évite conflit motion/react
+            ballRef.current.animate(
+              [
+                { transform: `translate(-50%, -50%) rotate(${state.rotation}deg) scaleY(1) scaleX(1)` },
+                { transform: `translate(-50%, -50%) rotate(${state.rotation + 8}deg) scaleY(0.72) scaleX(1.22)` },
+                { transform: `translate(-50%, -50%) rotate(${state.rotation + 18}deg) scaleY(1) scaleX(1)` },
+              ],
+              { duration: 150, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', fill: 'none' }
+            );
+          } else {
+            ballRef.current.style.transform =
+              `translate(-50%, -50%) rotate(${state.rotation}deg)`;
+          }
+        }
+
+        if (shadowRef.current) {
+          shadowRef.current.style.left      = `${state.currentX}%`;
+          shadowRef.current.style.top       = `${state.currentY}vh`;
+          shadowRef.current.style.transform =
+            `translate(-50%, 14px) scaleX(${shadowW}) scaleY(0.28)`;
+          shadowRef.current.style.opacity   = String(shadowOpac);
+        }
+
+        TRAIL_REFS.forEach((ref, i) => {
+          if (!ref.current) return;
+          const tp = state.trail[i];
+          ref.current.style.left      = `${tp.x}%`;
+          ref.current.style.top       = `${tp.y}vh`;
+          ref.current.style.transform = 'translate(-50%, -50%)';
+          ref.current.style.opacity   = speed > 0.6 ? String(TRAIL_OPAC[i]) : '0';
+          const sz = `${TRAIL_SIZES[i]}px`;
+          ref.current.style.width  = sz;
+          ref.current.style.height = sz;
+        });
+      }
+
+      state.rafId = requestAnimationFrame(rafLoop);
+    }
+
+    // ── Handler scroll : écrit uniquement la cible, pas le DOM ──────────────
     const unsubscribe = scrollYProgress.on('change', (scrollT) => {
       const state = iv.current;
       const { x, y } = getBallPos(scrollT);
+      state.targetX = x;
+      state.targetY = y;
+      state.arcH    = getArcHeight(scrollT);
 
-      // ── Vitesse approx. en pixels ────────────────────────────────────────
-      const vw    = window.innerWidth;
-      const vh    = window.innerHeight;
-      const dx    = (x - state.lastX) * vw / 100;
-      const dy    = (y - state.lastY) * vh / 100;
-      const speed = Math.sqrt(dx * dx + dy * dy);
-
-      // ── Rotation proportionnelle à la vitesse ────────────────────────────
-      state.rotation += speed * 5; // degrés accumulés
-
-      // ── Détection d'impact (cooldown 300ms anti double-trigger) ──────────
+      // Détection d'impact (cooldown 300ms anti double-trigger)
       const now = Date.now();
       const isImpact =
         now - state.lastImpactAt > 300 &&
@@ -137,69 +216,20 @@ function AnimatedBall() {
           th => (state.lastT < th && scrollT >= th) ||
                 (state.lastT > th && scrollT <= th)
         );
-      if (isImpact) state.lastImpactAt = now;
-
-      // ── Traîne : décalage par rapport aux positions précédentes ──────────
-      state.trail = [
-        { x: state.lastX, y: state.lastY },
-        state.trail[0],
-        state.trail[1],
-      ];
-
-      // ── Ombre : grande quand balle haute (arcHeight élevé) ───────────────
-      const arcH       = getArcHeight(scrollT);
-      const shadowW    = 0.55 + arcH * 1.1;
-      const shadowOpac = 0.05 + arcH * 0.10;
-
-      // ── Mise à jour DOM directe ───────────────────────────────────────────
-
-      if (ballRef.current) {
-        ballRef.current.style.left = `${x}%`;
-        ballRef.current.style.top  = `${y}vh`;
-
-        if (isImpact) {
-          // Compression via Web Animations API — évite tout conflit motion/react
-          ballRef.current.animate(
-            [
-              { transform: `translate(-50%, -50%) rotate(${state.rotation}deg) scaleY(1)    scaleX(1)` },
-              { transform: `translate(-50%, -50%) rotate(${state.rotation + 8}deg) scaleY(0.72) scaleX(1.22)` },
-              { transform: `translate(-50%, -50%) rotate(${state.rotation + 18}deg) scaleY(1)    scaleX(1)` },
-            ],
-            { duration: 150, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', fill: 'none' }
-          );
-        } else {
-          ballRef.current.style.transform =
-            `translate(-50%, -50%) rotate(${state.rotation}deg)`;
-        }
+      if (isImpact) {
+        state.lastImpactAt  = now;
+        state.pendingImpact = true;
       }
-
-      if (shadowRef.current) {
-        shadowRef.current.style.left      = `${x}%`;
-        shadowRef.current.style.top       = `${y}vh`;
-        shadowRef.current.style.transform =
-          `translate(-50%, 14px) scaleX(${shadowW}) scaleY(0.28)`;
-        shadowRef.current.style.opacity   = String(shadowOpac);
-      }
-
-      TRAIL_REFS.forEach((ref, i) => {
-        if (!ref.current) return;
-        const tp = state.trail[i];
-        ref.current.style.left      = `${tp.x}%`;
-        ref.current.style.top       = `${tp.y}vh`;
-        ref.current.style.transform = 'translate(-50%, -50%)';
-        // Traîne visible uniquement si la balle se déplace (seuil vitesse)
-        ref.current.style.opacity = speed > 0.6 ? String(TRAIL_OPAC[i]) : '0';
-        const sz = `${TRAIL_SIZES[i]}px`;
-        ref.current.style.width  = sz;
-        ref.current.style.height = sz;
-      });
-
       state.lastT = scrollT;
-      state.lastX = x;
-      state.lastY = y;
     });
 
-    return () => unsubscribe();
+    // Démarre la boucle RAF
+    iv.current.rafId = requestAnimationFrame(rafLoop);
+
+    return () => {
+      unsubscribe();
+      if (iv.current.rafId) cancelAnimationFrame(iv.current.rafId);
+    };
   }, [scrollYProgress]);
 
   const base = {
@@ -552,9 +582,9 @@ export default function HomePage() {
                   <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
                 </svg>
               </div>
-              <h3 className="font-bold text-white mb-1">@paris.yaar.club</h3>
+              <h3 className="font-bold text-white mb-1">@parisyaarclub</h3>
               <a
-                href="https://www.instagram.com/paris.yaar.club"
+                href="https://www.instagram.com/parisyaarclub/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-gradient-to-r from-pink-400 to-purple-500 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:opacity-90 transition mt-2"

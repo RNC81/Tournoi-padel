@@ -7,7 +7,7 @@ const router = express.Router();
 // Les joueurs scannent ce QR code pour accéder au suivi du tournoi
 router.get('/', async (req, res) => {
   try {
-    const siteUrl = process.env.PUBLIC_URL || `http://localhost:5173`;
+    const siteUrl = process.env.PUBLIC_URL || 'https://idpp-r5hj.onrender.com/tournoi';
 
     // Générer le QR code en base64 (PNG)
     const qrDataUrl = await QRCode.toDataURL(siteUrl, {
