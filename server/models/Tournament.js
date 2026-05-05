@@ -20,7 +20,7 @@ const tournamentSchema = new Schema(
 
     status: {
       type: String,
-      enum: ['setup', 'registration', 'pool_stage', 'knockout', 'consolante', 'finished'],
+      enum: ['setup', 'registration', 'pool_stage', 'knockout', 'finished'],
       default: 'setup',
     },
 
@@ -55,14 +55,27 @@ const tournamentSchema = new Schema(
       final: setFormatSchema,
     },
 
-    // ── Règles de qualification depuis les poules ────────────────────────
+    // ── Règles de qualification depuis les poules (bracket principal) ───────
 
     qualificationRules: {
       // Taille cible du bracket principal (puissance de 2 : 8, 16, 32, 64).
-      // Détermine automatiquement qualifiedPerGroup et wildcardSpots.
       bracketTarget: { type: Number, default: 32 },
 
       // Critères de départage en ordre de priorité
+      tiebreaker: {
+        type: [String],
+        default: ['points', 'setDiff', 'setsWon', 'directConfrontation'],
+      },
+    },
+
+    // ── Règles de qualification depuis les poules consolante ─────────────────
+    // Même structure que qualificationRules — source de vérité pour le wizard consolante.
+
+    consolanteQualificationRules: {
+      // Taille cible du bracket consolante (puissance de 2 : 4, 8, 16, 32).
+      bracketTarget: { type: Number, default: null },
+
+      // Critères de départage (copiés depuis qualificationRules par défaut)
       tiebreaker: {
         type: [String],
         default: ['points', 'setDiff', 'setsWon', 'directConfrontation'],

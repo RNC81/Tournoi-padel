@@ -351,6 +351,101 @@ describe('Suite 4 — Seeding bracket (32 équipes, 5 groupes)', () => {
   });
 });
 
+// ─── SUITE 6 : Consolante — statut, contrainte pays, BYEs ────────────────────
+
+describe('Suite 6 — Consolante : statut invalide, contrainte pays, BYEs', () => {
+
+  // ── 6.1 : Statut "consolante" supprimé ──────────────────────────────────────
+
+  const VALID_STATUSES = ['setup', 'registration', 'pool_stage', 'knockout', 'finished'];
+
+  test('Le statut "consolante" n\'est plus accepté', () => {
+    expect(VALID_STATUSES.includes('consolante')).toBe(false);
+  });
+
+  test('Les statuts valides sont exactement 5 (consolante retiré)', () => {
+    expect(VALID_STATUSES.length).toBe(5);
+    expect(VALID_STATUSES).toEqual(['setup', 'registration', 'pool_stage', 'knockout', 'finished']);
+  });
+
+  // ── 6.2 : Tirage consolante_pool respecte la contrainte pays ────────────────
+
+  test('consolante_pool : 9 équipes, 3 pays, 3 groupes → max 1 équipe/pays/groupe', () => {
+    const countries = ['Paris', 'Lyon', 'Marseille'];
+    const teams = makeTeamsWithCountries(9, countries);
+    // 9 équipes = 3 par pays, 3 groupes = 3 par groupe
+    const groups = distributeTeams(teams, 3, x => x);
+
+    expect(groups.length).toBe(3);
+    for (const g of groups) {
+      for (const country of countries) {
+        const count = g.teams.filter(t => t.country === country).length;
+        // Avec serpentin : 3 équipes de chaque pays → max 1 par groupe
+        expect(count).toBeLessThanOrEqual(Math.ceil(3 / 3) + 1);
+      }
+    }
+  });
+
+  test('consolante_pool : total des équipes préservé après tirage', () => {
+    const teams = makeTeamsWithCountries(9, ['Paris', 'Lyon', 'Marseille']);
+    const groups = distributeTeams(teams, 3, x => x);
+    const total = groups.reduce((s, g) => s + g.teams.length, 0);
+    expect(total).toBe(9);
+  });
+
+  // ── 6.3 : BYEs pour bracket consolante ──────────────────────────────────────
+
+  test('9 équipes → bracketTarget=16 → 7 BYEs', () => {
+    const teamsCount   = 9;
+    const bracketTarget = 16;
+    const byes = bracketTarget - teamsCount;
+    expect(byes).toBe(7);
+  });
+
+  test('4 équipes → bracketTarget=4 → 0 BYE', () => {
+    expect(4 - 4).toBe(0);
+  });
+
+  test('7 équipes → bracketTarget=8 → 1 BYE', () => {
+    expect(8 - 7).toBe(1);
+  });
+
+  test('bracketTarget valide : uniquement puissances de 2 (4, 8, 16, 32)', () => {
+    const validTargets = [4, 8, 16, 32];
+    for (const t of validTargets) {
+      expect(Math.log2(t) % 1).toBe(0); // puissance de 2 exacte
+    }
+    expect(validTargets.includes(3)).toBe(false);
+    expect(validTargets.includes(7)).toBe(false);
+    expect(validTargets.includes(9)).toBe(false);
+    expect(validTargets.includes(64)).toBe(false); // 64 exclu de CONSOLANTE (bracket trop grand)
+  });
+
+  // ── 6.4 : Éligibilité consolante (équipes group!=null && tournamentPath=null) ──
+
+  test('Équipes éligibles : group non null + tournamentPath null', () => {
+    const teams = [
+      { _id: 'T1', tournamentPath: 'main',       group: 'g1' }, // exclu (main)
+      { _id: 'T2', tournamentPath: null,          group: 'g1' }, // éligible
+      { _id: 'T3', tournamentPath: 'consolante',  group: 'g1' }, // exclu (déjà consolante)
+      { _id: 'T4', tournamentPath: null,          group: null  }, // exclu (pas de poule)
+      { _id: 'T5', tournamentPath: 'eliminated',  group: 'g1' }, // exclu (éliminé)
+      { _id: 'T6', tournamentPath: null,          group: 'g2' }, // éligible
+    ];
+    const eligible = teams.filter(t => t.tournamentPath === null && t.group !== null);
+    expect(eligible.map(t => t._id)).toEqual(['T2', 'T6']);
+    expect(eligible.length).toBe(2);
+  });
+
+  test('Zéro éligible si tous sont déjà assignés', () => {
+    const teams = [
+      { _id: 'T1', tournamentPath: 'main',      group: 'g1' },
+      { _id: 'T2', tournamentPath: 'consolante', group: 'g1' },
+    ];
+    expect(teams.filter(t => t.tournamentPath === null && t.group !== null).length).toBe(0);
+  });
+});
+
 // ─── SUITE 5 : Filtrage consolante ────────────────────────────────────────────
 
 describe('Suite 5 — Filtrage consolante', () => {

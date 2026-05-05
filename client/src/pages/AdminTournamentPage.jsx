@@ -7,24 +7,23 @@ import ConfirmModal from '../components/admin/ConfirmModal';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const STATUS_ORDER = ['setup', 'registration', 'pool_stage', 'knockout', 'consolante', 'finished'];
+// La consolante se déroule en parallèle du knockout — pas de statut dédié.
+const STATUS_ORDER = ['setup', 'registration', 'pool_stage', 'knockout', 'finished'];
 
 const STATUS_META = {
-  setup:        { label: 'Configuration',     color: 'gray'   },
-  registration: { label: 'Inscriptions',       color: 'blue'   },
-  pool_stage:   { label: 'Phase de poules',    color: 'yellow' },
-  knockout:     { label: 'Bracket principal',  color: 'green'  },
-  consolante:   { label: 'Bracket consolante', color: 'violet' },
-  finished:     { label: 'Terminé',            color: 'red'    },
+  setup:        { label: 'Configuration',    color: 'gray'   },
+  registration: { label: 'Inscriptions',      color: 'blue'   },
+  pool_stage:   { label: 'Phase de poules',   color: 'yellow' },
+  knockout:     { label: 'Bracket principal', color: 'green'  },
+  finished:     { label: 'Terminé',           color: 'red'    },
 };
 
 const STATUS_COLORS = {
-  gray:   { badge: 'bg-gray-500/20 text-gray-300 border-gray-500/30',     btn: 'border-gray-500/40 text-gray-300 hover:bg-gray-500/20'   },
-  blue:   { badge: 'bg-blue-500/20 text-blue-300 border-blue-500/30',     btn: 'border-blue-500/40 text-blue-300 hover:bg-blue-500/20'   },
+  gray:   { badge: 'bg-gray-500/20 text-gray-300 border-gray-500/30',       btn: 'border-gray-500/40 text-gray-300 hover:bg-gray-500/20'    },
+  blue:   { badge: 'bg-blue-500/20 text-blue-300 border-blue-500/30',       btn: 'border-blue-500/40 text-blue-300 hover:bg-blue-500/20'    },
   yellow: { badge: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30', btn: 'border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/20' },
-  green:  { badge: 'bg-green-500/20 text-green-300 border-green-500/30',  btn: 'border-green-500/40 text-green-300 hover:bg-green-500/20'  },
-  violet: { badge: 'bg-violet-500/20 text-violet-300 border-violet-500/30', btn: 'border-violet-500/40 text-violet-300 hover:bg-violet-500/20' },
-  red:    { badge: 'bg-red-500/20 text-red-300 border-red-500/30',        btn: 'border-red-500/40 text-red-300 hover:bg-red-500/20'       },
+  green:  { badge: 'bg-green-500/20 text-green-300 border-green-500/30',    btn: 'border-green-500/40 text-green-300 hover:bg-green-500/20'  },
+  red:    { badge: 'bg-red-500/20 text-red-300 border-red-500/30',          btn: 'border-red-500/40 text-red-300 hover:bg-red-500/20'       },
 };
 
 const FORMAT_ROWS = [

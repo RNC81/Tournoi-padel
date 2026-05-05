@@ -111,13 +111,14 @@ router.put('/', async (req, res) => {
 // Changer le statut du tournoi.
 // Aucune validation de transition — n'importe quel statut peut aller vers n'importe quel autre.
 // Exception : warning si on repasse à "registration" depuis "pool_stage".
-// Body : { status: "registration" | "pool_stage" | "knockout" | "consolante" | "finished" | "setup" }
+// Body : { status: "setup" | "registration" | "pool_stage" | "knockout" | "finished" }
+// Note : "consolante" n'est plus un statut — la consolante se déroule en parallèle du knockout.
 
 router.put('/status', async (req, res) => {
   try {
     const { status } = req.body;
 
-    const validStatuses = ['setup', 'registration', 'pool_stage', 'knockout', 'consolante', 'finished'];
+    const validStatuses = ['setup', 'registration', 'pool_stage', 'knockout', 'finished'];
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({
         error: `Statut invalide. Valeurs acceptées : ${validStatuses.join(', ')}`,

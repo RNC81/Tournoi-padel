@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useScroll, useTransform } from 'motion/react';
 import publicApi from '../utils/publicApi';
@@ -88,9 +88,70 @@ function FullPageCourt() {
   );
 }
 
-// ─── BALLE ANIMÉE (fixed, scroll-driven) ─────────────────────────────────────
+// ─── BOUTON PERMISSION GYROSCOPE ──────────────────────────────────────────────
+// Affiché une seule fois sur mobile si la permission n'a pas encore été demandée.
+// Position : bottom-right discret, disparaît après réponse.
+function GyroButton({ onPermissionResult }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    // Actif uniquement sur mobile ET si l'API DeviceOrientationEvent existe
+    const isMobile = window.innerWidth <= 768;
+    if (!isMobile || typeof DeviceOrientationEvent === 'undefined') return;
+
+    // iOS 13+ nécessite une permission explicite
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      setVisible(true);
+    } else {
+      // Android / autres : permission implicite — listener direct
+      onPermissionResult('granted');
+    }
+  }, [onPermissionResult]);
+
+  const handleRequest = async () => {
+    setVisible(false);
+    try {
+      const result = await DeviceOrientationEvent.requestPermission();
+      onPermissionResult(result); // 'granted' ou 'denied'
+    } catch (_) {
+      onPermissionResult('denied');
+    }
+  };
+
+  if (!visible) return null;
+
+  return (
+    <button
+      onClick={handleRequest}
+      title="Activer le gyroscope"
+      style={{
+        position:        'fixed',
+        bottom:          '24px',
+        right:           '24px',
+        zIndex:          30,
+        width:           '44px',
+        height:          '44px',
+        borderRadius:    '50%',
+        background:      '#2d6a2d',
+        border:          '2px solid rgba(200,232,50,0.4)',
+        display:         'flex',
+        alignItems:      'center',
+        justifyContent:  'center',
+        fontSize:        '20px',
+        boxShadow:       '0 4px 16px rgba(45,106,45,0.5)',
+        cursor:          'pointer',
+        animation:       'gyro-pulse 2s ease-in-out infinite',
+      }}
+      aria-label="Activer le gyroscope"
+    >
+      🎾
+    </button>
+  );
+}
+
+// ─── BALLE ANIMÉE (fixed, scroll-driven + gyroscope sur mobile) ───────────────
 // Trajectoire Bézier, rotation, compression à l'impact, traîne, ombre.
-// Architecture : handler scroll → target seulement / RAF loop → lerp + DOM.
+// Architecture : handler scroll → target / gyroscope → offset / RAF loop → lerp + DOM.
 // Zéro re-render React, zéro jitter.
 function AnimatedBall() {
   const { scrollYProgress } = useScroll();
@@ -100,6 +161,14 @@ function AnimatedBall() {
   const trail1Ref = useRef(null); // traîne proche   (t-1)
   const trail2Ref = useRef(null); // traîne moyenne  (t-2)
   const trail3Ref = useRef(null); // traîne lointaine (t-3)
+
+  // Gyroscope : permission iOS
+  const [gyroPermission, setGyroPermission] = useState('unknown'); // 'unknown'|'granted'|'denied'
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+
+  const handlePermissionResult = useCallback((result) => {
+    setGyroPermission(result);
+  }, []);
 
   // État interne mutable — aucune liaison avec le cycle de rendu React
   const iv = useRef({
@@ -113,13 +182,40 @@ function AnimatedBall() {
     arcH:         0,
     trail: [{ x: 50, y: 8 }, { x: 50, y: 8 }, { x: 50, y: 8 }],
     rafId: null,
+    // Offset gyroscope — s'additionne à la position scroll (lerp 0.08 séparé)
+    gyroOffsetX: 0, gyroOffsetY: 0,       // valeurs cibles gyro
+    gyroCurrentX: 0, gyroCurrentY: 0,     // valeurs lerpées gyro
   });
+
+  // ── Listener gyroscope (actif si permission accordée + mobile) ─────────────
+  useEffect(() => {
+    if (!isMobile || gyroPermission !== 'granted') return;
+
+    const GYRO_LERP   = 0.08;
+    const GAMMA_SCALE = 8 / 30;  // ±30° → ±8% X
+    const BETA_SCALE  = 5 / 30;  // ±30° → ±5% Y
+
+    function onOrientation(e) {
+      const state = iv.current;
+      // gamma : inclinaison gauche/droite (±90° max, on clamp à ±30°)
+      const gamma = Math.max(-30, Math.min(30, e.gamma || 0));
+      // beta  : inclinaison avant/arrière (soustrait 45° = position tenue naturelle)
+      const beta  = Math.max(-30, Math.min(30, (e.beta || 0) - 45));
+
+      state.gyroOffsetX = gamma * GAMMA_SCALE;
+      state.gyroOffsetY = beta  * BETA_SCALE;
+    }
+
+    window.addEventListener('deviceorientation', onOrientation, { passive: true });
+    return () => window.removeEventListener('deviceorientation', onOrientation);
+  }, [gyroPermission, isMobile]);
 
   useEffect(() => {
     const TRAIL_REFS  = [trail1Ref, trail2Ref, trail3Ref];
     const TRAIL_SIZES = [14, 10, 7];       // px
     const TRAIL_OPAC  = [0.4, 0.2, 0.08]; // opacité quand visible
-    const LERP = 0.12;                     // facteur de lissage
+    const LERP      = 0.12;  // lissage scroll
+    const GYRO_LERP = 0.08;  // lissage gyroscope (plus doux)
 
     // ── RAF loop : lerp + toutes les écritures DOM ───────────────────────────
     function rafLoop() {
@@ -128,14 +224,22 @@ function AnimatedBall() {
       state.prevX = state.currentX;
       state.prevY = state.currentY;
 
-      // Lissage vers la cible
+      // Lerp gyroscope (indépendant du scroll)
+      state.gyroCurrentX += (state.gyroOffsetX - state.gyroCurrentX) * GYRO_LERP;
+      state.gyroCurrentY += (state.gyroOffsetY - state.gyroCurrentY) * GYRO_LERP;
+
+      // Lissage scroll vers la cible + cumul offset gyroscope
       state.currentX += (state.targetX - state.currentX) * LERP;
       state.currentY += (state.targetY - state.currentY) * LERP;
 
+      // Position finale = scroll + gyroscope (clampée dans les limites du terrain)
+      const finalX = Math.max(4, Math.min(96, state.currentX + state.gyroCurrentX));
+      const finalY = Math.max(2, Math.min(95, state.currentY + state.gyroCurrentY));
+
       const vw    = window.innerWidth;
       const vh    = window.innerHeight;
-      const dx    = (state.currentX - state.prevX) * vw / 100;
-      const dy    = (state.currentY - state.prevY) * vh / 100;
+      const dx    = (finalX - state.prevX) * vw / 100;
+      const dy    = (finalY - state.prevY) * vh / 100;
       const speed = Math.sqrt(dx * dx + dy * dy);
       const distToTarget =
         Math.abs(state.targetX - state.currentX) +
@@ -156,8 +260,8 @@ function AnimatedBall() {
         const shadowOpac = 0.05 + state.arcH * 0.10;
 
         if (ballRef.current) {
-          ballRef.current.style.left = `${state.currentX}%`;
-          ballRef.current.style.top  = `${state.currentY}vh`;
+          ballRef.current.style.left = `${finalX}%`;
+          ballRef.current.style.top  = `${finalY}vh`;
 
           if (state.pendingImpact) {
             state.pendingImpact = false;
@@ -177,8 +281,8 @@ function AnimatedBall() {
         }
 
         if (shadowRef.current) {
-          shadowRef.current.style.left      = `${state.currentX}%`;
-          shadowRef.current.style.top       = `${state.currentY}vh`;
+          shadowRef.current.style.left      = `${finalX}%`;
+          shadowRef.current.style.top       = `${finalY}vh`;
           shadowRef.current.style.transform =
             `translate(-50%, 14px) scaleX(${shadowW}) scaleY(0.28)`;
           shadowRef.current.style.opacity   = String(shadowOpac);
@@ -187,8 +291,11 @@ function AnimatedBall() {
         TRAIL_REFS.forEach((ref, i) => {
           if (!ref.current) return;
           const tp = state.trail[i];
-          ref.current.style.left      = `${tp.x}%`;
-          ref.current.style.top       = `${tp.y}vh`;
+          // La traîne suit la position finale (scroll + gyro)
+          const trailFinalX = Math.max(4, Math.min(96, tp.x + state.gyroCurrentX));
+          const trailFinalY = Math.max(2, Math.min(95, tp.y + state.gyroCurrentY));
+          ref.current.style.left      = `${trailFinalX}%`;
+          ref.current.style.top       = `${trailFinalY}vh`;
           ref.current.style.transform = 'translate(-50%, -50%)';
           ref.current.style.opacity   = speed > 0.6 ? String(TRAIL_OPAC[i]) : '0';
           const sz = `${TRAIL_SIZES[i]}px`;
@@ -260,6 +367,11 @@ function AnimatedBall() {
         left:      '50%',
         transform: 'translate(-50%, -50%)',
       }} />
+
+      {/* Bouton permission gyroscope — mobile uniquement, disparaît après réponse */}
+      {isMobile && gyroPermission === 'unknown' && (
+        <GyroButton onPermissionResult={handlePermissionResult} />
+      )}
     </>
   );
 }

@@ -109,15 +109,28 @@ router.post('/draw', async (req, res) => {
       });
     }
 
-    // Sélectionner les équipes selon la phase
+    // Sélectionner les équipes selon la phase.
+    // consolante_pool : équipes qui ont fait les poules principales mais n'ont PAS été qualifiées
+    // (tournamentPath=null : pas encore 'main', pas déjà 'consolante' ou 'eliminated')
     const teams = phase === 'pool'
       ? await Team.find({ group: null })
-      : await Team.find({ tournamentPath: 'consolante' });
+      : await Team.find({ group: { $ne: null }, tournamentPath: null });
 
     if (teams.length < 4) {
       return res.status(400).json({
         error: `Pas assez d'équipes éligibles (minimum 4, trouvé ${teams.length})`,
       });
+    }
+
+    // Pour consolante_pool : sauvegarder bracketTarget dans consolanteQualificationRules
+    if (phase === 'consolante_pool' && req.body.bracketTarget) {
+      const bt = parseInt(req.body.bracketTarget, 10);
+      if ([4, 8, 16, 32].includes(bt)) {
+        await require('../models/Tournament').findOneAndUpdate(
+          {},
+          { $set: { 'consolanteQualificationRules.bracketTarget': bt } }
+        );
+      }
     }
 
     // Calcul du nombre de groupes
@@ -203,10 +216,13 @@ router.post('/draw', async (req, res) => {
       group.matches = matchIds;
       await group.save();
 
-      // Mettre à jour team.group pour chaque équipe du groupe
+      // Mettre à jour team.group pour chaque équipe du groupe.
+      // Pour consolante_pool : assigner aussi tournamentPath='consolante'
+      const teamUpdate = { group: group._id };
+      if (phase === 'consolante_pool') teamUpdate.tournamentPath = 'consolante';
       await Team.updateMany(
         { _id: { $in: slice.teams.map(t => t._id) } },
-        { $set: { group: group._id } }
+        { $set: teamUpdate }
       );
 
       createdGroups.push({

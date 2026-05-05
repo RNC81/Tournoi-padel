@@ -300,9 +300,10 @@ router.post('/generate', async (req, res) => {
     // Sauvegarder bracketTarget dans les règles du tournoi
     tournament.qualificationRules.bracketTarget = bracketTarget;
 
-    // Mise à jour des chemins de tournoi
-    await Team.updateMany({ _id: { $in: qualified  } }, { $set: { tournamentPath: 'main'       } });
-    await Team.updateMany({ _id: { $in: consolante } }, { $set: { tournamentPath: 'consolante' } });
+    // Mise à jour des chemins de tournoi.
+    // Les qualifiés → 'main'. Les non-qualifiés restent à null — le wizard consolante
+    // les prend en charge (Option A : poules, Option B : bracket direct).
+    await Team.updateMany({ _id: { $in: qualified } }, { $set: { tournamentPath: 'main' } });
 
     // Mise à jour du statut du tournoi
     tournament.currentPhase = phases[0];
@@ -325,18 +326,27 @@ router.post('/generate', async (req, res) => {
 });
 
 // ─── POST /api/bracket/consolante/generate ───────────────────────────────────
-// Génère le bracket consolante.
-// Body : { direct?: true, seedOrder?: [teamId1, ...] }
+// Génère le bracket consolante. Deux modes :
 //
-// direct: true  → bracket direct depuis les équipes tournamentPath='consolante'
-//                  (pas de poules consolante nécessaires)
-// direct: false → ancienne logique via consolante_pool (non utilisée pour l'instant)
+// Option B — direct: true + bracketTarget
+//   → Équipes éligibles : group != null && tournamentPath = null (non-qualifiés du bracket principal)
+//   → Crée le bracket avec BYEs si teams.length < bracketTarget
+//   → Assigne tournamentPath='consolante' aux équipes
+//
+// Option A — (pas de direct) après poules consolante
+//   → Équipes éligibles : tournamentPath='consolante' (déjà assignées par groups/draw)
+//   → Utilise les classements consolante_pool pour le seeding
+//   → Si teams.length <= bracketTarget : toutes qualifiées + BYEs
+//   → Si teams.length > bracketTarget : computeQualification consolante_pool, reste → 'eliminated'
+//
+// Body : { direct?: true, bracketTarget?: 4|8|16|32, seedOrder?: [teamId1, ...] }
 
 router.post('/consolante/generate', async (req, res) => {
   try {
     const tournament = await Tournament.findOne();
     if (!tournament) return res.status(404).json({ error: 'Aucun tournoi configuré' });
 
+    // Vérifier qu'il n'y a pas déjà un bracket consolante
     const existing = await Match.countDocuments({
       tournament: tournament._id,
       phase: { $in: ['consolante_r32', 'consolante_r16', 'consolante_qf', 'consolante_sf', 'consolante_final'] },
@@ -345,24 +355,69 @@ router.post('/consolante/generate', async (req, res) => {
       return res.status(409).json({ error: 'Un bracket consolante existe déjà.' });
     }
 
-    // ── Mode direct : bracket depuis tournamentPath='consolante' ─────────────
-    const consolanteTeams = await Team.find({ tournamentPath: 'consolante' });
+    // ── Détection du mode ────────────────────────────────────────────────────
+    const isDirect = req.body.direct === true;
+
+    let consolanteTeams;
+    const poolPhaseForSeeding = isDirect ? 'pool' : 'consolante_pool';
+
+    if (isDirect) {
+      // Option B : équipes qui ont fait les poules principales mais n'ont pas été qualifiées
+      consolanteTeams = await Team.find({ group: { $ne: null }, tournamentPath: null });
+    } else {
+      // Option A : équipes déjà assignées à la consolante via le tirage de poules consolante
+      consolanteTeams = await Team.find({ tournamentPath: 'consolante' });
+    }
 
     if (consolanteTeams.length < 4) {
       return res.status(400).json({
-        error: `Pas assez d'équipes consolante (minimum 4, trouvé ${consolanteTeams.length}). Générez d'abord le bracket principal.`,
+        error: `Pas assez d'équipes consolante (minimum 4, trouvé ${consolanteTeams.length}).`,
       });
     }
 
-    // Récupérer le classement pool de chaque équipe consolante pour le seeding
-    const groupIds  = [...new Set(consolanteTeams.map(t => String(t.group)).filter(Boolean))];
-    const poolGroups = await Group.find({ _id: { $in: groupIds }, phase: 'pool' });
+    // ── Taille du bracket ────────────────────────────────────────────────────
+    const reqBracketTarget = req.body.bracketTarget
+      ? parseInt(req.body.bracketTarget, 10)
+      : null;
+    const savedBracketTarget = tournament.consolanteQualificationRules?.bracketTarget;
 
+    let bSize;
+    if (reqBracketTarget) {
+      if (![4, 8, 16, 32].includes(reqBracketTarget)) {
+        return res.status(400).json({
+          error: 'bracketTarget invalide — valeurs acceptées : 4, 8, 16, 32',
+        });
+      }
+      bSize = reqBracketTarget;
+    } else if (savedBracketTarget && [4, 8, 16, 32].includes(savedBracketTarget)) {
+      bSize = savedBracketTarget;
+    } else {
+      bSize = getBracketSize(consolanteTeams.length);
+    }
+
+    if (consolanteTeams.length > bSize) {
+      return res.status(400).json({
+        error: `Trop d'équipes (${consolanteTeams.length}) pour un bracket de ${bSize}. Augmentez bracketTarget.`,
+      });
+    }
+
+    const phases = CONSOLANTE_PHASES[bSize];
+    if (!phases) {
+      return res.status(400).json({ error: `Taille de bracket non supportée : ${bSize}` });
+    }
+
+    // ── Seeding depuis les classements de poule (principal ou consolante) ────
     const tiebreaker = tournament.qualificationRules?.tiebreaker ??
       ['points', 'setDiff', 'setsWon', 'directConfrontation'];
 
+    const groupIds = [...new Set(consolanteTeams.map(t => String(t.group)).filter(Boolean))];
+    const poolGroupsForSeeding = await Group.find({
+      _id:   { $in: groupIds },
+      phase: poolPhaseForSeeding,
+    });
+
     const rankByTeamId = {};
-    for (const group of poolGroups) {
+    for (const group of poolGroupsForSeeding) {
       const rawMatches = await Match.find({ _id: { $in: group.matches } });
       const standings  = computeStandings(group.teams, rawMatches, tiebreaker);
       for (const s of standings) {
@@ -375,9 +430,6 @@ router.post('/consolante/generate', async (req, res) => {
       const info = rankByTeamId[id] || { rank: 99, groupName: '?' };
       return { id, group: info.groupName, rank: info.rank, country: t.country || '' };
     });
-
-    const bSize  = getBracketSize(consolanteTeams.length);
-    const phases = CONSOLANTE_PHASES[bSize];
 
     // Seeding : ordre manuel ou algo automatique (snake + correcteur pays/groupe)
     let seededTeams;
@@ -392,15 +444,24 @@ router.post('/consolante/generate', async (req, res) => {
 
     const totalCreated = await createFullBracket(tournament._id, seededTeams, phases, tournament);
 
+    // Assigner tournamentPath='consolante' (nécessaire pour Option B où c'était encore null)
+    await Team.updateMany(
+      { _id: { $in: consolanteTeams.map(t => t._id) } },
+      { $set: { tournamentPath: 'consolante' } }
+    );
+
+    // La consolante se déroule en parallèle du knockout — pas de changement de statut
     tournament.currentPhase = phases[0];
-    tournament.status       = 'consolante';
     await tournament.save();
+
+    const byes = bSize - consolanteTeams.length;
 
     const response = {
       message:        `Bracket consolante généré : ${consolanteTeams.length} équipes → bracket ${bSize}, ${phases[0]} → consolante_final`,
       bracketSize:    bSize,
       firstPhase:     phases[0],
       teams:          consolanteTeams.length,
+      byes,
       matchesCreated: totalCreated,
     };
     if (seedingConflicts.length > 0) response.conflicts = seedingConflicts;
