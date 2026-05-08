@@ -219,6 +219,12 @@ function AnimatedBall() {
   const trail2Ref = useRef(null);
   const trail3Ref = useRef(null);
 
+  // Flashs de bord — un div fixe par mur, animé 50ms à chaque rebond
+  const flashLeftRef   = useRef(null);
+  const flashRightRef  = useRef(null);
+  const flashTopRef    = useRef(null);
+  const flashBottomRef = useRef(null);
+
   const [gyroPermission, setGyroPermission] = useState('unknown');
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
@@ -246,6 +252,7 @@ function AnimatedBall() {
     vx: 0,     vy: 0,          // vélocité en unités/frame
     gyroFx: 0, gyroFy: 0,      // forces gyroscope courantes
     physicsLastBounce: -1,     // timestamp dernier rebond (cooldown 50ms)
+    pendingBounceWall: null,   // 'left' | 'right' | 'top' | 'bottom'
   });
 
   // ── Activation physique quand gyroPermission → 'granted' ─────────────────
@@ -279,6 +286,10 @@ function AnimatedBall() {
     const TRAIL_SIZES = [14, 10, 7];
     const TRAIL_OPAC  = [0.4, 0.2, 0.08];
     const LERP        = 0.12;
+    const FLASH_REFS  = {
+      left: flashLeftRef, right: flashRightRef,
+      top:  flashTopRef,  bottom: flashBottomRef,
+    };
 
     function rafLoop() {
       const state = iv.current;
@@ -294,6 +305,23 @@ function AnimatedBall() {
         state.gyroFx            = 0;
         state.gyroFy            = 0;
         state.physicsLastBounce = -1;
+
+        // Passer en mode "par-dessus tout" + taille 24px
+        // TODO : si on ajoute un bouton désactivation gyroscope,
+        //        remettre zIndex à 15 et taille à 18px ici.
+        if (ballRef.current) {
+          ballRef.current.style.zIndex = '9999';
+          ballRef.current.style.width  = '24px';
+          ballRef.current.style.height = '24px';
+        }
+        if (shadowRef.current) {
+          shadowRef.current.style.zIndex = '9998';
+          shadowRef.current.style.width  = '24px';
+          shadowRef.current.style.height = '24px';
+        }
+        [trail1Ref, trail2Ref, trail3Ref].forEach(r => {
+          if (r.current) r.current.style.zIndex = '9997';
+        });
       }
 
       let finalX, finalY, speed, shadowW, shadowOpac;
@@ -312,10 +340,11 @@ function AnimatedBall() {
         state.physX += state.vx;
         state.physY += state.vy;
 
-        // Rebonds sur les 4 bords (cooldown 50ms pour éviter double-trigger)
+        // Rebonds sur les 4 bords du viewport (cooldown 50ms pour éviter double-trigger)
         const RESTITUTION = 0.85;
-        const bW  = 9 / window.innerWidth  * 100;  // rayon balle en %
-        const bH  = 9 / window.innerHeight * 100;  // rayon balle en vh
+        const ballRadius  = 12;  // 24px / 2 — rayon en pixels (taille physique = 24px)
+        const bW  = ballRadius / window.innerWidth  * 100;
+        const bH  = ballRadius / window.innerHeight * 100;
         const nowB      = Date.now();
         const canBounce = nowB - state.physicsLastBounce > 50;
 
@@ -323,28 +352,28 @@ function AnimatedBall() {
           state.physX = bW;
           if (state.vx < 0) {
             state.vx = Math.abs(state.vx) * RESTITUTION;
-            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; }
+            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; state.pendingBounceWall = 'left'; }
           }
         }
         if (state.physX > 100 - bW) {
           state.physX = 100 - bW;
           if (state.vx > 0) {
             state.vx = -Math.abs(state.vx) * RESTITUTION;
-            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; }
+            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; state.pendingBounceWall = 'right'; }
           }
         }
         if (state.physY < bH) {
           state.physY = bH;
           if (state.vy < 0) {
             state.vy = Math.abs(state.vy) * RESTITUTION;
-            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; }
+            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; state.pendingBounceWall = 'top'; }
           }
         }
         if (state.physY > 100 - bH) {
           state.physY = 100 - bH;
           if (state.vy > 0) {
             state.vy = -Math.abs(state.vy) * RESTITUTION;
-            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; }
+            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; state.pendingBounceWall = 'bottom'; }
           }
         }
 
@@ -414,6 +443,17 @@ function AnimatedBall() {
             ],
             { duration: 100, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', fill: 'none' }
           );
+          // Flash du bord touché — ligne #c8e832 de 2px, visible 50ms
+          if (state.pendingBounceWall) {
+            const fRef = FLASH_REFS[state.pendingBounceWall];
+            if (fRef?.current) {
+              fRef.current.animate(
+                [{ opacity: 0.85 }, { opacity: 0 }],
+                { duration: 50, easing: 'ease-out', fill: 'none' }
+              );
+            }
+            state.pendingBounceWall = null;
+          }
         } else {
           ballRef.current.style.transform =
             `translate(-50%, -50%) rotate(${state.rotation}deg)`;
@@ -485,6 +525,12 @@ function AnimatedBall() {
 
   return (
     <>
+      {/* Flashs de rebond — un bord par mur, opacity 0 au repos, animés 50ms */}
+      <div ref={flashLeftRef}   style={{ position: 'fixed', pointerEvents: 'none', zIndex: 9996, opacity: 0, left: 0,    top: 0,    width: '2px',  height: '100vh', background: '#c8e832' }} />
+      <div ref={flashRightRef}  style={{ position: 'fixed', pointerEvents: 'none', zIndex: 9996, opacity: 0, right: 0,   top: 0,    width: '2px',  height: '100vh', background: '#c8e832' }} />
+      <div ref={flashTopRef}    style={{ position: 'fixed', pointerEvents: 'none', zIndex: 9996, opacity: 0, top: 0,     left: 0,   width: '100vw', height: '2px',  background: '#c8e832' }} />
+      <div ref={flashBottomRef} style={{ position: 'fixed', pointerEvents: 'none', zIndex: 9996, opacity: 0, bottom: 0,  left: 0,   width: '100vw', height: '2px',  background: '#c8e832' }} />
+
       <div ref={shadowRef} style={{ ...base, zIndex: 14, width: '18px', height: '18px', background: '#2d6a2d', opacity: 0 }} />
       <div ref={trail3Ref} style={{ ...base, width: '7px',  height: '7px',  background: '#c8e832', opacity: 0 }} />
       <div ref={trail2Ref} style={{ ...base, width: '10px', height: '10px', background: '#c8e832', opacity: 0 }} />
