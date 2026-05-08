@@ -395,43 +395,78 @@ router.post('/consolante/generate', async (req, res) => {
       bSize = getBracketSize(consolanteTeams.length);
     }
 
-    if (consolanteTeams.length > bSize) {
-      return res.status(400).json({
-        error: `Trop d'équipes (${consolanteTeams.length}) pour un bracket de ${bSize}. Augmentez bracketTarget.`,
-      });
-    }
-
     const phases = CONSOLANTE_PHASES[bSize];
     if (!phases) {
       return res.status(400).json({ error: `Taille de bracket non supportée : ${bSize}` });
     }
 
-    // ── Seeding depuis les classements de poule (principal ou consolante) ────
-    const tiebreaker = tournament.qualificationRules?.tiebreaker ??
-      ['points', 'setDiff', 'setsWon', 'directConfrontation'];
+    // ── Qualification si trop d'équipes pour le bracket ──────────────────────
+    // Option A (!isDirect) : computeQualification depuis consolante_pool
+    //   → identique au bracket principal, reste → 'eliminated'
+    // Option B (isDirect) : impossible sans poules → erreur
+    let meta;
+    let eliminatedCount = 0;
 
-    const groupIds = [...new Set(consolanteTeams.map(t => String(t.group)).filter(Boolean))];
-    const poolGroupsForSeeding = await Group.find({
-      _id:   { $in: groupIds },
-      phase: poolPhaseForSeeding,
-    });
+    if (!isDirect && consolanteTeams.length > bSize) {
+      // Qualification depuis les classements consolante_pool
+      const { qualified, consolante: unqualified, qualifiedMeta } =
+        await computeQualification(tournament, 'consolante_pool', bSize);
 
-    const rankByTeamId = {};
-    for (const group of poolGroupsForSeeding) {
-      const rawMatches = await Match.find({ _id: { $in: group.matches } });
-      const standings  = computeStandings(group.teams, rawMatches, tiebreaker);
-      for (const s of standings) {
-        rankByTeamId[String(s.teamId)] = { rank: s.rank, groupName: group.name };
+      if (qualified.length < 4) {
+        return res.status(400).json({
+          error: `Pas assez d'équipes qualifiées consolante (minimum 4, trouvé ${qualified.length})`,
+        });
       }
+      if (qualified.length !== bSize) {
+        return res.status(400).json({
+          error: `Impossible d'atteindre ${bSize} qualifiés consolante : seulement ${qualified.length} équipes éligibles.`,
+        });
+      }
+
+      // Non-qualifiés : éliminés définitivement
+      if (unqualified.length > 0) {
+        await Team.updateMany({ _id: { $in: unqualified } }, { $set: { tournamentPath: 'eliminated' } });
+        eliminatedCount = unqualified.length;
+      }
+
+      // Réduire consolanteTeams aux qualifiés seulement pour le seeding
+      consolanteTeams = consolanteTeams.filter(t => qualified.includes(String(t._id)));
+      meta = qualifiedMeta;
+
+    } else if (consolanteTeams.length > bSize) {
+      // isDirect + trop d'équipes : pas de qualification possible sans poules consolante
+      return res.status(400).json({
+        error: `Trop d'équipes (${consolanteTeams.length}) pour un bracket de ${bSize}. Augmentez bracketTarget.`,
+      });
+
+    } else {
+      // consolanteTeams.length <= bSize : toutes qualifiées, BYEs automatiques si besoin
+      const tiebreaker = tournament.qualificationRules?.tiebreaker ??
+        ['points', 'setDiff', 'setsWon', 'directConfrontation'];
+
+      const groupIds = [...new Set(consolanteTeams.map(t => String(t.group)).filter(Boolean))];
+      const poolGroupsForSeeding = await Group.find({
+        _id:   { $in: groupIds },
+        phase: poolPhaseForSeeding,
+      });
+
+      const rankByTeamId = {};
+      for (const group of poolGroupsForSeeding) {
+        const rawMatches = await Match.find({ _id: { $in: group.matches } });
+        const standings  = computeStandings(group.teams, rawMatches, tiebreaker);
+        for (const s of standings) {
+          rankByTeamId[String(s.teamId)] = { rank: s.rank, groupName: group.name };
+        }
+      }
+
+      meta = consolanteTeams.map(t => {
+        const id   = String(t._id);
+        const info = rankByTeamId[id] || { rank: 99, groupName: '?' };
+        return { id, group: info.groupName, rank: info.rank, country: t.country || '' };
+      });
     }
 
-    const meta = consolanteTeams.map(t => {
-      const id   = String(t._id);
-      const info = rankByTeamId[id] || { rank: 99, groupName: '?' };
-      return { id, group: info.groupName, rank: info.rank, country: t.country || '' };
-    });
-
-    // Seeding : ordre manuel ou algo automatique (snake + correcteur pays/groupe)
+    // ── Seeding : ordre manuel ou algo automatique (snake + correcteur pays/groupe) ──
     let seededTeams;
     let seedingConflicts = [];
     if (Array.isArray(req.body.seedOrder) && req.body.seedOrder.length > 0) {
@@ -462,6 +497,7 @@ router.post('/consolante/generate', async (req, res) => {
       firstPhase:     phases[0],
       teams:          consolanteTeams.length,
       byes,
+      eliminated:     eliminatedCount,
       matchesCreated: totalCreated,
     };
     if (seedingConflicts.length > 0) response.conflicts = seedingConflicts;

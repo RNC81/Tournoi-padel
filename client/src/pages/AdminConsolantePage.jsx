@@ -539,8 +539,19 @@ function ConsolantePoolsView({ tournament, onBracketGenerated, onScoreClick, onR
   const playedMatches = groups.reduce((s, g) =>
     s + (g.matches?.filter(m => m.played && m.sets?.length > 0).length || 0), 0
   );
+  const totalTeams = groups.reduce((s, g) => s + (g.teams?.length || 0), 0);
 
   const savedBracketTarget = tournament?.consolanteQualificationRules?.bracketTarget;
+
+  // Calcul de la qualification (même logique que le bracket principal)
+  const qualPreview = savedBracketTarget && groups.length > 0 ? (() => {
+    const qualPerGroup  = Math.floor(savedBracketTarget / groups.length);
+    const wildcards     = savedBracketTarget - (qualPerGroup * groups.length);
+    const willQualify   = Math.min(savedBracketTarget, totalTeams);
+    const willEliminate = Math.max(0, totalTeams - savedBracketTarget);
+    const needsQual     = totalTeams > savedBracketTarget;
+    return { qualPerGroup, wildcards, willQualify, willEliminate, needsQual };
+  })() : null;
 
   const handleGenerateBracket = async () => {
     setGenerating(true);
@@ -587,6 +598,23 @@ function ConsolantePoolsView({ tournament, onBracketGenerated, onScoreClick, onR
           )}
         </div>
       </div>
+
+      {/* ── Panneau qualification (si trop d'équipes pour le bracket) ── */}
+      {qualPreview?.needsQual && (
+        <div className="bg-violet-500/8 border border-violet-500/20 rounded-xl px-4 py-3 text-sm space-y-1">
+          <p className="text-violet-300 font-semibold">
+            Qualification pour le bracket consolante de {savedBracketTarget}
+          </p>
+          <p className="text-white/50">
+            {totalTeams} équipes · {qualPreview.qualPerGroup} qualifiée{qualPreview.qualPerGroup > 1 ? 's' : ''}/groupe
+            {qualPreview.wildcards > 0 && ` + ${qualPreview.wildcards} wildcard${qualPreview.wildcards > 1 ? 's' : ''}`}
+            {' '}→ {qualPreview.willQualify} retenues, {qualPreview.willEliminate} éliminées
+          </p>
+          <p className="text-white/30 text-xs">
+            La qualification est calculée automatiquement lors de la génération du bracket.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl px-4 py-3">

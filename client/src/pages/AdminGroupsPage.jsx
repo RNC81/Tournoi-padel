@@ -67,7 +67,7 @@ function ScoreModal({ match, setFormat, onClose, onSaved }) {
     setError('');
     try {
       await api.put(`/matches/${match._id}/score`, { sets: filledSets });
-      onSaved();
+      await onSaved(); // fetchAll() doit compléter avant de fermer le modal
       onClose();
     } catch (err) {
       setError(err.response?.data?.error || 'Erreur lors de la sauvegarde');
@@ -80,7 +80,7 @@ function ScoreModal({ match, setFormat, onClose, onSaved }) {
     setLoading(true);
     try {
       await api.delete(`/matches/${match._id}/score`);
-      onSaved();
+      await onSaved();
       onClose();
     } catch (err) {
       setError(err.response?.data?.error || 'Erreur lors de la réinitialisation');
@@ -553,7 +553,7 @@ export default function AdminGroupsPage() {
           match={scoreMatch}
           setFormat={setFormat}
           onClose={() => setScoreMatch(null)}
-          onSaved={() => { showToast('ok', 'Score enregistré'); fetchAll(); }}
+          onSaved={() => { showToast('ok', 'Score enregistré'); return fetchAll(); }}
         />
       )}
 
