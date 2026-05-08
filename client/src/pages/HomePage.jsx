@@ -90,20 +90,18 @@ function FullPageCourt() {
 
 // ─── BOUTON PERMISSION GYROSCOPE ──────────────────────────────────────────────
 // Affiché une seule fois sur mobile si la permission n'a pas encore été demandée.
-// Position : bottom-right discret, disparaît après réponse.
 function GyroButton({ onPermissionResult }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    // Actif uniquement sur mobile ET si l'API DeviceOrientationEvent existe
     const isMobile = window.innerWidth <= 768;
     if (!isMobile || typeof DeviceOrientationEvent === 'undefined') return;
 
-    // iOS 13+ nécessite une permission explicite
     if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // iOS 13+ : permission explicite requise
       setVisible(true);
     } else {
-      // Android / autres : permission implicite — listener direct
+      // Android / autres : permission implicite
       onPermissionResult('granted');
     }
   }, [onPermissionResult]);
@@ -112,7 +110,7 @@ function GyroButton({ onPermissionResult }) {
     setVisible(false);
     try {
       const result = await DeviceOrientationEvent.requestPermission();
-      onPermissionResult(result); // 'granted' ou 'denied'
+      onPermissionResult(result);
     } catch (_) {
       onPermissionResult('denied');
     }
@@ -125,22 +123,22 @@ function GyroButton({ onPermissionResult }) {
       onClick={handleRequest}
       title="Activer le gyroscope"
       style={{
-        position:        'fixed',
-        bottom:          '24px',
-        right:           '24px',
-        zIndex:          30,
-        width:           '44px',
-        height:          '44px',
-        borderRadius:    '50%',
-        background:      '#2d6a2d',
-        border:          '2px solid rgba(200,232,50,0.4)',
-        display:         'flex',
-        alignItems:      'center',
-        justifyContent:  'center',
-        fontSize:        '20px',
-        boxShadow:       '0 4px 16px rgba(45,106,45,0.5)',
-        cursor:          'pointer',
-        animation:       'gyro-pulse 2s ease-in-out infinite',
+        position:       'fixed',
+        bottom:         '24px',
+        right:          '24px',
+        zIndex:         30,
+        width:          '44px',
+        height:         '44px',
+        borderRadius:   '50%',
+        background:     '#2d6a2d',
+        border:         '2px solid rgba(200,232,50,0.4)',
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'center',
+        fontSize:       '20px',
+        boxShadow:      '0 4px 16px rgba(45,106,45,0.5)',
+        cursor:         'pointer',
+        animation:      'gyro-pulse 2s ease-in-out infinite',
       }}
       aria-label="Activer le gyroscope"
     >
@@ -149,21 +147,79 @@ function GyroButton({ onPermissionResult }) {
   );
 }
 
-// ─── BALLE ANIMÉE (fixed, scroll-driven + gyroscope sur mobile) ───────────────
-// Trajectoire Bézier, rotation, compression à l'impact, traîne, ombre.
-// Architecture : handler scroll → target / gyroscope → offset / RAF loop → lerp + DOM.
-// Zéro re-render React, zéro jitter.
+// ─── BADGE MODE PHYSIQUE ACTIF ─────────────────────────────────────────────────
+// Remplace le bouton une fois la permission accordée.
+// "Incline pour jouer" disparaît après 3s.
+function GyroActiveBadge() {
+  const [showHint, setShowHint] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowHint(false), 3000);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div style={{
+      position:       'fixed',
+      bottom:         '24px',
+      right:          '24px',
+      zIndex:         30,
+      display:        'flex',
+      flexDirection:  'column',
+      alignItems:     'flex-end',
+      gap:            '6px',
+      pointerEvents:  'none',
+    }}>
+      {showHint && (
+        <div style={{
+          background:     'rgba(45,106,45,0.92)',
+          color:          '#c8e832',
+          fontSize:       '11px',
+          fontWeight:     600,
+          letterSpacing:  '0.06em',
+          padding:        '5px 12px',
+          borderRadius:   '20px',
+          border:         '1px solid rgba(200,232,50,0.35)',
+          whiteSpace:     'nowrap',
+          backdropFilter: 'blur(8px)',
+          animation:      'fade-in 0.3s ease',
+        }}>
+          Incline pour jouer
+        </div>
+      )}
+      <div style={{
+        width:        '44px',
+        height:       '44px',
+        borderRadius: '50%',
+        background:   '#2d6a2d',
+        border:       '2px solid #c8e832',
+        display:      'flex',
+        alignItems:   'center',
+        justifyContent: 'center',
+        fontSize:     '20px',
+        boxShadow:    '0 4px 16px rgba(45,106,45,0.6), 0 0 0 4px rgba(200,232,50,0.18)',
+      }}>
+        🎾
+      </div>
+    </div>
+  );
+}
+
+// ─── BALLE ANIMÉE ─────────────────────────────────────────────────────────────
+// Mode scroll  : trajectoire Bézier pilotée par scrollYProgress.
+// Mode physique: simulation force/vélocité/rebonds pilotée par le gyroscope.
+// Les deux modes partagent la même boucle RAF et les mêmes écritures DOM.
+// Zéro re-render React.
 function AnimatedBall() {
   const { scrollYProgress } = useScroll();
 
   const ballRef   = useRef(null);
   const shadowRef = useRef(null);
-  const trail1Ref = useRef(null); // traîne proche   (t-1)
-  const trail2Ref = useRef(null); // traîne moyenne  (t-2)
-  const trail3Ref = useRef(null); // traîne lointaine (t-3)
+  const trail1Ref = useRef(null);
+  const trail2Ref = useRef(null);
+  const trail3Ref = useRef(null);
 
-  // Gyroscope : permission iOS
-  const [gyroPermission, setGyroPermission] = useState('unknown'); // 'unknown'|'granted'|'denied'
+  const [gyroPermission, setGyroPermission] = useState('unknown');
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
   const handlePermissionResult = useCallback((result) => {
@@ -172,150 +228,232 @@ function AnimatedBall() {
 
   // État interne mutable — aucune liaison avec le cycle de rendu React
   const iv = useRef({
-    targetX:  50, targetY:  8,   // mis à jour par le handler scroll
-    currentX: 50, currentY: 8,   // lerpés dans le RAF loop
-    prevX:    50, prevY:    8,   // frame précédente (calcul vitesse)
+    // Mode scroll
+    targetX:  50, targetY:  8,
+    currentX: 50, currentY: 8,
+    prevX:    50, prevY:    8,
     rotation:     0,
     lastT:        0,
     lastImpactAt: -1,
-    pendingImpact: false,        // impact détecté → RAF l'applique
+    pendingImpact: false,
     arcH:         0,
     trail: [{ x: 50, y: 8 }, { x: 50, y: 8 }, { x: 50, y: 8 }],
     rafId: null,
-    // Offset gyroscope — s'additionne à la position scroll (lerp 0.08 séparé)
-    gyroOffsetX: 0, gyroOffsetY: 0,       // valeurs cibles gyro
-    gyroCurrentX: 0, gyroCurrentY: 0,     // valeurs lerpées gyro
+    // Mode physique
+    physicsActive:     false,
+    gyroJustGranted:   false,  // flag → active la physique à la prochaine frame
+    physX: 50, physY: 8,       // position physique (%, vh)
+    vx: 0,     vy: 0,          // vélocité en unités/frame
+    gyroFx: 0, gyroFy: 0,      // forces gyroscope courantes
+    physicsLastBounce: -1,     // timestamp dernier rebond (cooldown 50ms)
   });
 
-  // ── Listener gyroscope (actif si permission accordée + mobile) ─────────────
+  // ── Activation physique quand gyroPermission → 'granted' ─────────────────
+  useEffect(() => {
+    if (gyroPermission === 'granted') {
+      iv.current.gyroJustGranted = true;
+    }
+  }, [gyroPermission]);
+
+  // ── Listener deviceorientation ────────────────────────────────────────────
   useEffect(() => {
     if (!isMobile || gyroPermission !== 'granted') return;
 
-    const GYRO_LERP   = 0.08;
-    const GAMMA_SCALE = 8 / 30;  // ±30° → ±8% X
-    const BETA_SCALE  = 5 / 30;  // ±30° → ±5% Y
-
     function onOrientation(e) {
       const state = iv.current;
-      // gamma : inclinaison gauche/droite (±90° max, on clamp à ±30°)
-      const gamma = Math.max(-30, Math.min(30, e.gamma || 0));
-      // beta  : inclinaison avant/arrière (soustrait 45° = position tenue naturelle)
-      const beta  = Math.max(-30, Math.min(30, (e.beta || 0) - 45));
-
-      state.gyroOffsetX = gamma * GAMMA_SCALE;
-      state.gyroOffsetY = beta  * BETA_SCALE;
+      if (!state.physicsActive) return;
+      const gamma = Math.max(-90, Math.min(90, e.gamma || 0));
+      const beta  = Math.max(-90, Math.min(90, (e.beta  || 0) - 45));
+      // Forces avec scaling 0.005 — réactif sans être ingérable
+      state.gyroFx = gamma * 0.005;
+      state.gyroFy = beta  * 0.005;
     }
 
     window.addEventListener('deviceorientation', onOrientation, { passive: true });
     return () => window.removeEventListener('deviceorientation', onOrientation);
   }, [gyroPermission, isMobile]);
 
+  // ── Boucle RAF principale ─────────────────────────────────────────────────
   useEffect(() => {
     const TRAIL_REFS  = [trail1Ref, trail2Ref, trail3Ref];
-    const TRAIL_SIZES = [14, 10, 7];       // px
-    const TRAIL_OPAC  = [0.4, 0.2, 0.08]; // opacité quand visible
-    const LERP      = 0.12;  // lissage scroll
-    const GYRO_LERP = 0.08;  // lissage gyroscope (plus doux)
+    const TRAIL_SIZES = [14, 10, 7];
+    const TRAIL_OPAC  = [0.4, 0.2, 0.08];
+    const LERP        = 0.12;
 
-    // ── RAF loop : lerp + toutes les écritures DOM ───────────────────────────
     function rafLoop() {
       const state = iv.current;
 
-      state.prevX = state.currentX;
-      state.prevY = state.currentY;
+      // ── Activation physique (exécuté une seule fois à la permission) ───────
+      if (state.gyroJustGranted) {
+        state.gyroJustGranted   = false;
+        state.physX             = state.currentX;
+        state.physY             = state.currentY;
+        state.vx                = (Math.random() - 0.5) * 4;  // [-2, 2]
+        state.vy                = -(Math.random() * 2 + 1);    // [-3, -1] vers le haut
+        state.physicsActive     = true;
+        state.gyroFx            = 0;
+        state.gyroFy            = 0;
+        state.physicsLastBounce = -1;
+      }
 
-      // Lerp gyroscope (indépendant du scroll)
-      state.gyroCurrentX += (state.gyroOffsetX - state.gyroCurrentX) * GYRO_LERP;
-      state.gyroCurrentY += (state.gyroOffsetY - state.gyroCurrentY) * GYRO_LERP;
+      let finalX, finalY, speed, shadowW, shadowOpac;
 
-      // Lissage scroll vers la cible + cumul offset gyroscope
-      state.currentX += (state.targetX - state.currentX) * LERP;
-      state.currentY += (state.targetY - state.currentY) * LERP;
+      if (state.physicsActive) {
+        // ── MODE PHYSIQUE ──────────────────────────────────────────────────────
 
-      // Position finale = scroll + gyroscope (clampée dans les limites du terrain)
-      const finalX = Math.max(4, Math.min(96, state.currentX + state.gyroCurrentX));
-      const finalY = Math.max(2, Math.min(95, state.currentY + state.gyroCurrentY));
+        state.prevX = state.physX;
+        state.prevY = state.physY;
 
-      const vw    = window.innerWidth;
-      const vh    = window.innerHeight;
-      const dx    = (finalX - state.prevX) * vw / 100;
-      const dy    = (finalY - state.prevY) * vh / 100;
-      const speed = Math.sqrt(dx * dx + dy * dy);
-      const distToTarget =
-        Math.abs(state.targetX - state.currentX) +
-        Math.abs(state.targetY - state.currentY);
+        // Force gyroscope → vélocité → position
+        state.vx += state.gyroFx;
+        state.vy += state.gyroFy;
+        state.vx *= 0.992;   // friction légère — glisse longtemps
+        state.vy *= 0.992;
+        state.physX += state.vx;
+        state.physY += state.vy;
 
-      // Seuil minimum — inutile de redessiner si quasi immobile
-      if (speed > 0.02 || distToTarget > 0.05) {
-        state.rotation += speed * 5;
+        // Rebonds sur les 4 bords (cooldown 50ms pour éviter double-trigger)
+        const RESTITUTION = 0.85;
+        const bW  = 9 / window.innerWidth  * 100;  // rayon balle en %
+        const bH  = 9 / window.innerHeight * 100;  // rayon balle en vh
+        const nowB      = Date.now();
+        const canBounce = nowB - state.physicsLastBounce > 50;
 
-        // Traîne : lag par rapport à la frame précédente
-        state.trail = [
-          { x: state.prevX, y: state.prevY },
-          state.trail[0],
-          state.trail[1],
-        ];
-
-        const shadowW    = 0.55 + state.arcH * 1.1;
-        const shadowOpac = 0.05 + state.arcH * 0.10;
-
-        if (ballRef.current) {
-          ballRef.current.style.left = `${finalX}%`;
-          ballRef.current.style.top  = `${finalY}vh`;
-
-          if (state.pendingImpact) {
-            state.pendingImpact = false;
-            // Compression via Web Animations API — évite conflit motion/react
-            ballRef.current.animate(
-              [
-                { transform: `translate(-50%, -50%) rotate(${state.rotation}deg) scaleY(1) scaleX(1)` },
-                { transform: `translate(-50%, -50%) rotate(${state.rotation + 8}deg) scaleY(0.72) scaleX(1.22)` },
-                { transform: `translate(-50%, -50%) rotate(${state.rotation + 18}deg) scaleY(1) scaleX(1)` },
-              ],
-              { duration: 150, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', fill: 'none' }
-            );
-          } else {
-            ballRef.current.style.transform =
-              `translate(-50%, -50%) rotate(${state.rotation}deg)`;
+        if (state.physX < bW) {
+          state.physX = bW;
+          if (state.vx < 0) {
+            state.vx = Math.abs(state.vx) * RESTITUTION;
+            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; }
+          }
+        }
+        if (state.physX > 100 - bW) {
+          state.physX = 100 - bW;
+          if (state.vx > 0) {
+            state.vx = -Math.abs(state.vx) * RESTITUTION;
+            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; }
+          }
+        }
+        if (state.physY < bH) {
+          state.physY = bH;
+          if (state.vy < 0) {
+            state.vy = Math.abs(state.vy) * RESTITUTION;
+            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; }
+          }
+        }
+        if (state.physY > 100 - bH) {
+          state.physY = 100 - bH;
+          if (state.vy > 0) {
+            state.vy = -Math.abs(state.vy) * RESTITUTION;
+            if (canBounce) { state.physicsLastBounce = nowB; state.pendingImpact = true; }
           }
         }
 
-        if (shadowRef.current) {
-          shadowRef.current.style.left      = `${finalX}%`;
-          shadowRef.current.style.top       = `${finalY}vh`;
-          shadowRef.current.style.transform =
-            `translate(-50%, 14px) scaleX(${shadowW}) scaleY(0.28)`;
-          shadowRef.current.style.opacity   = String(shadowOpac);
+        finalX = state.physX;
+        finalY = state.physY;
+
+        const vwP = window.innerWidth;
+        const vhP = window.innerHeight;
+        const dxP = (finalX - state.prevX) * vwP / 100;
+        const dyP = (finalY - state.prevY) * vhP / 100;
+        speed      = Math.sqrt(dxP * dxP + dyP * dyP);
+        shadowW    = 0.55;
+        shadowOpac = 0.08;
+
+      } else {
+        // ── MODE SCROLL ────────────────────────────────────────────────────────
+
+        state.prevX = state.currentX;
+        state.prevY = state.currentY;
+
+        state.currentX += (state.targetX - state.currentX) * LERP;
+        state.currentY += (state.targetY - state.currentY) * LERP;
+
+        finalX = Math.max(4, Math.min(96, state.currentX));
+        finalY = Math.max(2, Math.min(95, state.currentY));
+
+        const vwS = window.innerWidth;
+        const vhS = window.innerHeight;
+        const dxS = (finalX - state.prevX) * vwS / 100;
+        const dyS = (finalY - state.prevY) * vhS / 100;
+        speed      = Math.sqrt(dxS * dxS + dyS * dyS);
+
+        const distToTarget =
+          Math.abs(state.targetX - state.currentX) +
+          Math.abs(state.targetY - state.currentY);
+
+        // Seuil minimum — skip DOM si balle quasi immobile
+        if (speed <= 0.02 && distToTarget <= 0.05) {
+          state.rafId = requestAnimationFrame(rafLoop);
+          return;
         }
 
-        TRAIL_REFS.forEach((ref, i) => {
-          if (!ref.current) return;
-          const tp = state.trail[i];
-          // La traîne suit la position finale (scroll + gyro)
-          const trailFinalX = Math.max(4, Math.min(96, tp.x + state.gyroCurrentX));
-          const trailFinalY = Math.max(2, Math.min(95, tp.y + state.gyroCurrentY));
-          ref.current.style.left      = `${trailFinalX}%`;
-          ref.current.style.top       = `${trailFinalY}vh`;
-          ref.current.style.transform = 'translate(-50%, -50%)';
-          ref.current.style.opacity   = speed > 0.6 ? String(TRAIL_OPAC[i]) : '0';
-          const sz = `${TRAIL_SIZES[i]}px`;
-          ref.current.style.width  = sz;
-          ref.current.style.height = sz;
-        });
+        shadowW    = 0.55 + state.arcH * 1.1;
+        shadowOpac = 0.05 + state.arcH * 0.10;
       }
+
+      // ── Commun : rotation + traîne ─────────────────────────────────────────
+      state.rotation += speed * 5;
+      state.trail = [
+        { x: state.prevX, y: state.prevY },
+        state.trail[0],
+        state.trail[1],
+      ];
+
+      // ── Écriture DOM ───────────────────────────────────────────────────────
+      if (ballRef.current) {
+        ballRef.current.style.left = `${finalX}%`;
+        ballRef.current.style.top  = `${finalY}vh`;
+
+        if (state.pendingImpact) {
+          state.pendingImpact = false;
+          ballRef.current.animate(
+            [
+              { transform: `translate(-50%, -50%) rotate(${state.rotation}deg) scaleY(1) scaleX(1)` },
+              { transform: `translate(-50%, -50%) rotate(${state.rotation + 8}deg) scaleY(0.72) scaleX(1.22)` },
+              { transform: `translate(-50%, -50%) rotate(${state.rotation + 18}deg) scaleY(1) scaleX(1)` },
+            ],
+            { duration: 100, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', fill: 'none' }
+          );
+        } else {
+          ballRef.current.style.transform =
+            `translate(-50%, -50%) rotate(${state.rotation}deg)`;
+        }
+      }
+
+      if (shadowRef.current) {
+        shadowRef.current.style.left      = `${finalX}%`;
+        shadowRef.current.style.top       = `${finalY}vh`;
+        shadowRef.current.style.transform =
+          `translate(-50%, 14px) scaleX(${shadowW}) scaleY(0.28)`;
+        shadowRef.current.style.opacity   = String(shadowOpac);
+      }
+
+      TRAIL_REFS.forEach((ref, i) => {
+        if (!ref.current) return;
+        const tp = state.trail[i];
+        // En mode physique, tp.x/y sont déjà en coordonnées finales
+        // En mode scroll, idem (currentX/Y sans offset gyro)
+        ref.current.style.left      = `${tp.x}%`;
+        ref.current.style.top       = `${tp.y}vh`;
+        ref.current.style.transform = 'translate(-50%, -50%)';
+        ref.current.style.opacity   = speed > 0.6 ? String(TRAIL_OPAC[i]) : '0';
+        const sz = `${TRAIL_SIZES[i]}px`;
+        ref.current.style.width  = sz;
+        ref.current.style.height = sz;
+      });
 
       state.rafId = requestAnimationFrame(rafLoop);
     }
 
-    // ── Handler scroll : écrit uniquement la cible, pas le DOM ──────────────
+    // ── Handler scroll : cible seulement, pas de DOM ──────────────────────────
     const unsubscribe = scrollYProgress.on('change', (scrollT) => {
       const state = iv.current;
+      if (state.physicsActive) return; // scroll ignoré en mode physique
       const { x, y } = getBallPos(scrollT);
       state.targetX = x;
       state.targetY = y;
       state.arcH    = getArcHeight(scrollT);
 
-      // Détection d'impact (cooldown 300ms anti double-trigger)
       const now = Date.now();
       const isImpact =
         now - state.lastImpactAt > 300 &&
@@ -330,7 +468,6 @@ function AnimatedBall() {
       state.lastT = scrollT;
     });
 
-    // Démarre la boucle RAF
     iv.current.rafId = requestAnimationFrame(rafLoop);
 
     return () => {
@@ -348,29 +485,29 @@ function AnimatedBall() {
 
   return (
     <>
-      {/* Ombre sol — ovale aplati, grandit avec la hauteur de la balle */}
       <div ref={shadowRef} style={{ ...base, zIndex: 14, width: '18px', height: '18px', background: '#2d6a2d', opacity: 0 }} />
-
-      {/* Traîne — du plus lointain au plus proche */}
       <div ref={trail3Ref} style={{ ...base, width: '7px',  height: '7px',  background: '#c8e832', opacity: 0 }} />
       <div ref={trail2Ref} style={{ ...base, width: '10px', height: '10px', background: '#c8e832', opacity: 0 }} />
       <div ref={trail1Ref} style={{ ...base, width: '14px', height: '14px', background: '#c8e832', opacity: 0 }} />
-
-      {/* Balle principale */}
       <div ref={ballRef} style={{
         ...base,
-        width:     '18px',
-        height:    '18px',
+        width:      '18px',
+        height:     '18px',
         background: '#c8e832',
-        boxShadow: '0 2px 10px rgba(200, 232, 50, 0.55)',
-        top:       '8vh',
-        left:      '50%',
-        transform: 'translate(-50%, -50%)',
+        boxShadow:  '0 2px 10px rgba(200, 232, 50, 0.55)',
+        top:        '8vh',
+        left:       '50%',
+        transform:  'translate(-50%, -50%)',
       }} />
 
-      {/* Bouton permission gyroscope — mobile uniquement, disparaît après réponse */}
+      {/* Bouton permission — mobile + pas encore demandé */}
       {isMobile && gyroPermission === 'unknown' && (
         <GyroButton onPermissionResult={handlePermissionResult} />
+      )}
+
+      {/* Badge mode actif — remplace le bouton une fois accordé */}
+      {isMobile && gyroPermission === 'granted' && (
+        <GyroActiveBadge />
       )}
     </>
   );
