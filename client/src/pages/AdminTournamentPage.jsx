@@ -340,8 +340,10 @@ export default function AdminTournamentPage() {
     );
   }
 
-  const currentStatus = tournament?.status || 'setup';
-  const currentMeta   = STATUS_META[currentStatus];
+  const currentStatus    = tournament?.status || 'setup';
+  // Statut hérité d'une ancienne version (ex: 'consolante' supprimé du modèle)
+  const isUnknownStatus  = !STATUS_META[currentStatus];
+  const currentMeta      = STATUS_META[currentStatus] ?? STATUS_META['setup'];
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
@@ -459,11 +461,20 @@ export default function AdminTournamentPage() {
       <section className="bg-dark-800 border border-white/10 rounded-2xl p-6">
         <h2 className="font-display font-semibold text-lg text-white mb-4">Statut du tournoi</h2>
 
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex flex-wrap items-center gap-3 mb-5">
           <span className="text-white/50 text-sm">Statut actuel :</span>
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${STATUS_COLORS[currentMeta.color].badge}`}>
-            {currentMeta.label}
-          </span>
+          {isUnknownStatus ? (
+            <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-orange-500/20 text-orange-300 border-orange-500/30">
+              Statut hérité : {currentStatus}
+            </span>
+          ) : (
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${STATUS_COLORS[currentMeta.color].badge}`}>
+              {currentMeta.label}
+            </span>
+          )}
+          {isUnknownStatus && (
+            <span className="text-orange-400/60 text-xs">— clique sur un statut ci-dessous pour corriger</span>
+          )}
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
