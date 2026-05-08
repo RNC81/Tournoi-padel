@@ -3,7 +3,7 @@
 // Polling toutes les 30s sur tous les endpoints.
 // Thème : sports editorial clair (beige / forest / lime).
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import publicApi from '../utils/publicApi';
 import usePolling from '../hooks/usePolling';
 import { formatTeamName } from '../utils/formatTeam';
@@ -64,7 +64,15 @@ export default function GuestHomePage() {
     setLoading(false);
   }, []);
 
-  usePolling(fetchAll, 30000, true);
+  // Polling toutes les 15s — le tournoi c'est du live
+  usePolling(fetchAll, 15000, true);
+
+  // Rafraîchissement immédiat quand le spectateur revient sur l'onglet
+  useEffect(() => {
+    const onVisible = () => { if (!document.hidden) fetchAll(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [fetchAll]);
 
   const hasGroups     = groups.length > 0;
   const hasBracket    = Object.keys(bracket).length > 0;

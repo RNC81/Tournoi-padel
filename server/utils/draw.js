@@ -64,4 +64,46 @@ function distributeTeams(teams, numG, shuffleFn = shuffle) {
   }));
 }
 
-module.exports = { distributeTeams, calcNumGroups, shuffle };
+/**
+ * Génère les matchs round-robin organisés par rounds (algorithme de Berger).
+ * Garantie : aucune équipe ne joue deux fois dans le même round.
+ *
+ * @param {number} n — nombre d'équipes
+ * @returns {Array<Array<[number, number]>>} — tableau de rounds,
+ *   chaque round étant un tableau de paires [idxA, idxB].
+ *   Aplatir avec .flat() pour obtenir la liste ordonnée des matchs.
+ *
+ * Exemple n=4 :
+ *   Round 0 : [[0,3],[1,2]]
+ *   Round 1 : [[0,2],[3,1]]
+ *   Round 2 : [[0,1],[2,3]]
+ *
+ * Pour n impair, un slot "bye" est ajouté (index n) et ignoré dans les paires.
+ */
+function roundRobinSchedule(n) {
+  const rounds = [];
+  if (n < 2) return rounds;
+
+  const N      = n % 2 === 0 ? n : n + 1;  // slot bye si impair
+  const circle = Array.from({ length: N }, (_, i) => i);
+
+  for (let r = 0; r < N - 1; r++) {
+    const round = [];
+    for (let i = 0; i < N / 2; i++) {
+      const a = circle[i];
+      const b = circle[N - 1 - i];
+      // Exclure les paires impliquant le slot bye (index n)
+      if (a < n && b < n) round.push([a, b]);
+    }
+    if (round.length > 0) rounds.push(round);
+
+    // Rotation de Berger : circle[0] est fixe, circle[1..N-1] tourne
+    const last = circle[N - 1];
+    for (let i = N - 1; i > 1; i--) circle[i] = circle[i - 1];
+    circle[1] = last;
+  }
+
+  return rounds;
+}
+
+module.exports = { distributeTeams, calcNumGroups, shuffle, roundRobinSchedule };

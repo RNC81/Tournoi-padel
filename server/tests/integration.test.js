@@ -2,7 +2,7 @@
 // Toutes ces fonctions sont pures (pas de DB) — utilisent les vrais utils exportés.
 'use strict';
 
-const { distributeTeams, calcNumGroups } = require('../utils/draw');
+const { distributeTeams, calcNumGroups, roundRobinSchedule } = require('../utils/draw');
 const { computeStandings }               = require('../utils/standings');
 const { computeSeeding }                 = require('../utils/seeding');
 
@@ -567,5 +567,81 @@ describe('Suite 7 — r32 : détermination du perdant pour pool consolante', () 
     const hadWinner   = 'TEAM_A';
     const loserToRestore = getLoserFromR32(playedMatch, hadWinner);
     expect(loserToRestore).toBe('TEAM_B'); // doit revenir tournamentPath = 'main'
+  });
+});
+
+// ─── Suite 8 — roundRobinSchedule : ordre des matchs par rounds de Berger ─────
+//
+// Garantit qu'aucune équipe ne joue deux fois dans le même round.
+// Les rounds sont aplatis en tableau de paires pour l'insertion en DB.
+
+describe('Suite 8 — roundRobinSchedule : ordre des matchs de poule', () => {
+
+  // Helper : vérifie qu'aucune équipe n'apparaît 2x dans un round
+  function assertNoDoubleInRound(round) {
+    const seen = new Set();
+    for (const [a, b] of round) {
+      expect(seen.has(a)).toBe(false);
+      expect(seen.has(b)).toBe(false);
+      seen.add(a);
+      seen.add(b);
+    }
+  }
+
+  // Helper : normalise une paire pour la comparaison (min-max)
+  function normPair([a, b]) { return `${Math.min(a,b)}-${Math.max(a,b)}`; }
+
+  test('n=4 : 3 rounds de 2 matchs chacun', () => {
+    const rounds = roundRobinSchedule(4);
+    expect(rounds).toHaveLength(3);
+    rounds.forEach(round => expect(round).toHaveLength(2));
+  });
+
+  test('n=4 : 6 matchs au total après aplatissement', () => {
+    expect(roundRobinSchedule(4).flat()).toHaveLength(6);
+  });
+
+  test('n=4 : aucune équipe 2x dans le même round', () => {
+    roundRobinSchedule(4).forEach(assertNoDoubleInRound);
+  });
+
+  test('n=4 : toutes les paires possibles sont représentées', () => {
+    const pairs = roundRobinSchedule(4).flat().map(normPair).sort();
+    expect(pairs).toEqual(['0-1', '0-2', '0-3', '1-2', '1-3', '2-3']);
+  });
+
+  test('n=3 (impair) : 3 matchs, aucune équipe 2x dans un round', () => {
+    const rounds = roundRobinSchedule(3);
+    expect(rounds.flat()).toHaveLength(3);
+    rounds.forEach(assertNoDoubleInRound);
+  });
+
+  test('n=3 : toutes les paires possibles', () => {
+    const pairs = roundRobinSchedule(3).flat().map(normPair).sort();
+    expect(pairs).toEqual(['0-1', '0-2', '1-2']);
+  });
+
+  test('n=6 : 5 rounds de 3 matchs, 15 matchs au total', () => {
+    const rounds = roundRobinSchedule(6);
+    expect(rounds).toHaveLength(5);
+    rounds.forEach(round => expect(round).toHaveLength(3));
+    expect(rounds.flat()).toHaveLength(15);
+  });
+
+  test('n=6 : aucune équipe 2x dans le même round', () => {
+    roundRobinSchedule(6).forEach(assertNoDoubleInRound);
+  });
+
+  test('n=5 (impair) : 10 matchs, aucune équipe 2x dans un round', () => {
+    const rounds = roundRobinSchedule(5);
+    expect(rounds.flat()).toHaveLength(10);
+    rounds.forEach(assertNoDoubleInRound);
+  });
+
+  test('n=2 : 1 round de 1 match', () => {
+    const rounds = roundRobinSchedule(2);
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0]).toHaveLength(1);
+    expect(rounds.flat()).toEqual([[0, 1]]);
   });
 });

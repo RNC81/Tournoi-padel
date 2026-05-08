@@ -5,7 +5,7 @@ const Group           = require('../models/Group');
 const Match           = require('../models/Match');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { computeStandings }          = require('../utils/standings');
-const { distributeTeams, calcNumGroups } = require('../utils/draw');
+const { distributeTeams, calcNumGroups, roundRobinSchedule } = require('../utils/draw');
 const validateObjectId              = require('../middleware/validateObjectId');
 const safeError                     = require('../utils/safeError');
 
@@ -16,17 +16,7 @@ router.use(requireAuth, requireAdmin);
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-// Génère toutes les paires round-robin pour N équipes
-// Retourne un tableau de [idxA, idxB]
-function roundRobinPairs(n) {
-  const pairs = [];
-  for (let i = 0; i < n - 1; i++) {
-    for (let j = i + 1; j < n; j++) {
-      pairs.push([i, j]);
-    }
-  }
-  return pairs;
-}
+// roundRobinPairs remplacé par roundRobinSchedule (draw.js) — ordre par rounds de Berger
 
 // ─── GET /api/groups ──────────────────────────────────────────────────────────
 // Lister tous les groupes. Filtre optionnel : ?phase=pool
@@ -197,8 +187,8 @@ router.post('/draw', async (req, res) => {
         teams: slice.teams.map(t => t._id),
       });
 
-      // Créer les matchs round-robin
-      const pairs = roundRobinPairs(slice.teams.length);
+      // Créer les matchs round-robin — ordre de Berger (aucune équipe 2x dans un round)
+      const pairs = roundRobinSchedule(slice.teams.length).flat();
       const matchIds = [];
 
       for (const [i, j] of pairs) {
