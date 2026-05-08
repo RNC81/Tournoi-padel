@@ -2,6 +2,7 @@ const express = require('express');
 const Tournament      = require('../models/Tournament');
 const Group           = require('../models/Group');
 const Match           = require('../models/Match');
+const Team            = require('../models/Team');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const validateObjectId              = require('../middleware/validateObjectId');
 const safeError                     = require('../utils/safeError');
@@ -151,6 +152,15 @@ router.put('/:id/score', validateObjectId, async (req, res) => {
     match.played = true;
     await match.save();
 
+    // r32 : le perdant rejoint automatiquement le pool consolante (tournamentPath = null)
+    // Uniquement en r32 — les phases suivantes sont éliminatoires définitives
+    if (match.phase === 'r32' && winner) {
+      const loserId = winner.toString() === match.team1.toString()
+        ? match.team2
+        : match.team1;
+      await Team.findByIdAndUpdate(loserId, { $set: { tournamentPath: null } });
+    }
+
     // Propagation bracket (phases knockout uniquement)
     if (NEXT_PHASE[match.phase]) {
       await propagateWinner(match);
@@ -213,6 +223,17 @@ router.delete('/:id/score', validateObjectId, async (req, res) => {
     match.winner = null;
     match.played = false;
     await match.save();
+
+    // r32 : réversibilité complète — le perdant revient en 'main'
+    // (annule l'envoi en pool consolante effectué lors de la saisie du score)
+    if (match.phase === 'r32' && hadWinner) {
+      const loserId = hadWinner.toString() === match.team1?.toString()
+        ? match.team2
+        : match.team1;
+      if (loserId) {
+        await Team.findByIdAndUpdate(loserId, { $set: { tournamentPath: 'main' } });
+      }
+    }
 
     // Si knockout : retirer le winner du slot du match suivant
     let warning = null;

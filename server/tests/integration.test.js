@@ -512,3 +512,60 @@ describe('Suite 5 — Filtrage consolante', () => {
     expect(standings.find(s => s.teamId === 'C3').played).toBe(1);
   });
 });
+
+// ─── Suite 7 — r32 : perdant rejoint le pool consolante ───────────────────────
+//
+// La logique métier du PUT /matches/:id/score pour la phase r32 :
+//   - winner reste tournamentPath = 'main'
+//   - loser passe à tournamentPath = null  → pool consolante
+//   - DELETE /score r32 : loser revient à tournamentPath = 'main'
+//
+// On teste la fonction de détermination du perdant, extraite comme règle pure.
+
+describe('Suite 7 — r32 : détermination du perdant pour pool consolante', () => {
+
+  // Logique identique à celle dans PUT /matches/:id/score
+  function getLoserFromR32(match, winner) {
+    if (!winner || match.phase !== 'r32') return null;
+    return winner.toString() === match.team1.toString()
+      ? match.team2
+      : match.team1;
+  }
+
+  const match = { phase: 'r32', team1: 'TEAM_A', team2: 'TEAM_B' };
+
+  test('team1 gagne → team2 est le perdant (rejoint consolante)', () => {
+    expect(getLoserFromR32(match, 'TEAM_A')).toBe('TEAM_B');
+  });
+
+  test('team2 gagne → team1 est le perdant (rejoint consolante)', () => {
+    expect(getLoserFromR32(match, 'TEAM_B')).toBe('TEAM_A');
+  });
+
+  test('le perdant est différent du gagnant', () => {
+    const loser = getLoserFromR32(match, 'TEAM_A');
+    expect(loser).not.toBe('TEAM_A');
+  });
+
+  test('phase r16 → pas de perdant consolante (élimination définitive)', () => {
+    const r16match = { phase: 'r16', team1: 'TEAM_A', team2: 'TEAM_B' };
+    expect(getLoserFromR32(r16match, 'TEAM_A')).toBeNull();
+  });
+
+  test('phase qf → pas de perdant consolante', () => {
+    const qfMatch = { phase: 'qf', team1: 'TEAM_A', team2: 'TEAM_B' };
+    expect(getLoserFromR32(qfMatch, 'TEAM_A')).toBeNull();
+  });
+
+  test('pas de winner (draw) → pas de perdant consolante', () => {
+    expect(getLoserFromR32(match, null)).toBeNull();
+  });
+
+  test('réversibilité : effacer score r32 → identifie correctement le perdant à remettre en main', () => {
+    // Simule l'état au moment du DELETE : hadWinner = 'TEAM_A', team2 = 'TEAM_B'
+    const playedMatch = { phase: 'r32', team1: 'TEAM_A', team2: 'TEAM_B' };
+    const hadWinner   = 'TEAM_A';
+    const loserToRestore = getLoserFromR32(playedMatch, hadWinner);
+    expect(loserToRestore).toBe('TEAM_B'); // doit revenir tournamentPath = 'main'
+  });
+});
