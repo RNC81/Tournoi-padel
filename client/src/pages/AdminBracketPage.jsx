@@ -5,7 +5,12 @@ import { formatTeamName } from '../utils/formatTeam';
 // ─── CONSTANTES ───────────────────────────────────────────────────────────────
 
 const ROUND_LABELS = {
-  r64: '64èmes', r32: '32èmes', r16: '16èmes', qf: 'Quarts', sf: 'Demis', final: 'Finale',
+  r64:   '32ème de finale',
+  r32:   '16ème de finale',
+  r16:   '8ème de finale',
+  qf:    'Quarts de finale',
+  sf:    'Demi-finales',
+  final: 'Finale',
 };
 
 // Phases dans l'ordre du bracket (gauche → droite)

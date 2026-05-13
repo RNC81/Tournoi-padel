@@ -5,11 +5,11 @@ import { formatTeamName } from '../utils/formatTeam';
 // ─── CONSTANTES ───────────────────────────────────────────────────────────────
 
 const ROUND_LABELS = {
-  consolante_r32:   '32èmes',
-  consolante_r16:   '16èmes',
-  consolante_qf:    'Quarts',
-  consolante_sf:    'Demis',
-  consolante_final: 'Finale C',
+  consolante_r32:   '16ème de finale',
+  consolante_r16:   '8ème de finale',
+  consolante_qf:    'Quarts de finale',
+  consolante_sf:    'Demi-finales',
+  consolante_final: 'Finale',
 };
 
 const BRACKET_PHASES = [

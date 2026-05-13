@@ -56,17 +56,17 @@ const T = {
 // ─── Constantes bracket ───────────────────────────────────────────────────────
 
 const ROUND_LABELS = {
-  r64:              '64èmes',
-  r32:              '32èmes',
-  r16:              '16èmes',
-  qf:               'Quarts',
-  sf:               'Demis',
+  r64:              '32ème de finale',
+  r32:              '16ème de finale',
+  r16:              '8ème de finale',
+  qf:               'Quarts de finale',
+  sf:               'Demi-finales',
   final:            'Finale',
-  consolante_r32:   '32èmes C',
-  consolante_r16:   '16èmes C',
-  consolante_qf:    'Quarts C',
-  consolante_sf:    'Demis C',
-  consolante_final: 'Finale C',
+  consolante_r32:   '16ème de finale',
+  consolante_r16:   '8ème de finale',
+  consolante_qf:    'Quarts de finale',
+  consolante_sf:    'Demi-finales',
+  consolante_final: 'Finale',
 };
 
 const MAIN_PHASES       = ['r64', 'r32', 'r16', 'qf', 'sf', 'final'];
