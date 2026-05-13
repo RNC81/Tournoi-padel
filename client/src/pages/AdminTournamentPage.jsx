@@ -698,7 +698,7 @@ export default function AdminTournamentPage() {
         <div className="space-y-3">
           {[
             { type: 'rules',    label: 'Règlement officiel', accept: '.pdf' },
-            { type: 'schedule', label: 'Horaires',           accept: '.pdf,.xls,.xlsx' },
+            { type: 'schedule', label: 'Horaires',           accept: '.pdf,.xlsx,.xlsm,.ods' },
           ].map(({ type, label, accept }) => {
             const doc = docs[type];
             return (

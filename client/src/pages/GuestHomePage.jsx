@@ -37,7 +37,7 @@ export default function GuestHomePage() {
   const [groups,         setGroups]         = useState([]);
   const [bracket,        setBracket]        = useState({});
   const [consolante,     setConsolante]     = useState({});
-  const [scheduleAvail,  setScheduleAvail]  = useState(false);
+  const [scheduleInfo,   setScheduleInfo]   = useState(null); // { exists, filename } ou null
   const [lastUpdate,     setLastUpdate]     = useState(null);
   const [loading,        setLoading]        = useState(true);
   const [apiError,       setApiError]       = useState(false);
@@ -71,7 +71,7 @@ export default function GuestHomePage() {
     if (grpRes.status === 'fulfilled') setGroups(grpRes.value.data || []);
     if (bktRes.status === 'fulfilled') setBracket(bktRes.value.data || {});
     if (conRes.status === 'fulfilled') setConsolante(conRes.value.data || {});
-    setScheduleAvail(schRes.status === 'fulfilled' && schRes.value.data?.exists === true);
+    setScheduleInfo(schRes.status === 'fulfilled' && schRes.value.data?.exists ? schRes.value.data : null);
 
     // Erreur totale si les endpoints principaux échouent tous
     const allFailed = [cfgRes, trnRes, grpRes, bktRes, conRes].every(r => r.status === 'rejected');
@@ -104,7 +104,7 @@ export default function GuestHomePage() {
     { id: 'groupes',    label: t.tabs.groupes,    active: hasGroups     },
     { id: 'bracket',    label: t.tabs.bracket,    active: hasBracket    },
     { id: 'consolante', label: t.tabs.consolante, active: hasConsolante },
-    { id: 'horaires',   label: t.tabs.horaires,   active: scheduleAvail },
+    { id: 'horaires',   label: t.tabs.horaires,   active: !!scheduleInfo },
   ];
 
   return (
@@ -177,7 +177,7 @@ export default function GuestHomePage() {
             ? <BracketTab data={consolante} phases={CONSOLANTE_PHASES} isFinalPhase="consolante_final" accent="violet" t={t} />
             : <NotStartedState label={lang === 'fr' ? 'bracket consolante' : 'consolation bracket'} config={config} hasStarted={hasStarted} t={t} />
         ) : (
-          <ScheduleTab available={scheduleAvail} t={t} />
+          <ScheduleTab info={scheduleInfo} t={t} />
         )}
       </div>
     </div>
@@ -440,10 +440,11 @@ function MatchRow({ match }) {
 
 // ─── Onglet Horaires ──────────────────────────────────────────────────────────
 
-function ScheduleTab({ available, t }) {
+function ScheduleTab({ info, t }) {
   const scheduleUrl = `${import.meta.env.VITE_API_URL || ''}/api/public/document/schedule`;
+  const isPdf = info?.filename?.toLowerCase().endsWith('.pdf');
 
-  if (!available) {
+  if (!info) {
     return (
       <div className="flex flex-col items-center justify-center py-28 text-center">
         <div className="w-14 h-14 rounded-full mb-5 flex items-center justify-center" style={{ background: '#c8e832' }}>
@@ -463,25 +464,34 @@ function ScheduleTab({ available, t }) {
     );
   }
 
+  const dlBtn = (
+    <a
+      href={scheduleUrl}
+      download={info.filename}
+      className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-7 py-3.5 rounded-xl text-base transition-all active:scale-95"
+    >
+      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"/>
+      </svg>
+      {t.scheduleDl}
+    </a>
+  );
+
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center gap-6">
-      <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: '#c8e832' }}>
-        <svg className="w-8 h-8 text-forest" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-        </svg>
+    <div className="space-y-4">
+      {/* iframe PDF — desktop uniquement, pas pour Excel/ODS */}
+      {isPdf && (
+        <iframe
+          src={scheduleUrl}
+          title="Horaires"
+          className="hidden sm:block w-full rounded-lg border border-forest/15"
+          style={{ height: '600px' }}
+        />
+      )}
+      <div className="flex justify-center pt-2">
+        {dlBtn}
       </div>
-      <a
-        href={scheduleUrl}
-        download
-        className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-7 py-3.5 rounded-xl text-base transition-all active:scale-95"
-      >
-        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"/>
-        </svg>
-        {t.scheduleDl}
-      </a>
     </div>
   );
 }

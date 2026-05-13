@@ -16,11 +16,11 @@ const router = express.Router();
 
 const UPLOADS_DIR   = path.join(__dirname, '../uploads');
 const ALLOWED_TYPES = ['rules', 'schedule'];
-const ALLOWED_MIMES = [
-  'application/pdf',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-];
+// Mimes acceptés pour le règlement (PDF seulement)
+const RULES_MIMES = ['application/pdf'];
+
+// Pour les horaires, on accepte tout — certains navigateurs envoient
+// application/octet-stream pour .ods / .xlsm, impossible à filtrer côté serveur.
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -37,8 +37,14 @@ const upload = multer({
   storage,
   limits:     { fileSize: 10 * 1024 * 1024 }, // 10 Mo max
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_MIMES.includes(file.mimetype)) cb(null, true);
-    else cb(new Error('Type de fichier non autorisé (PDF ou Excel uniquement)'));
+    if (req.params.type === 'rules') {
+      // Règlement : PDF uniquement
+      if (RULES_MIMES.includes(file.mimetype)) cb(null, true);
+      else cb(new Error('Le règlement doit être un fichier PDF'));
+    } else {
+      // Horaires : on accepte tout (PDF, xlsx, xlsm, ods, octet-stream...)
+      cb(null, true);
+    }
   },
 });
 

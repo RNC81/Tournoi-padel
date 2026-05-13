@@ -793,25 +793,35 @@ export default function HomePage() {
       {/* Zone : zone de service basse (sous le filet) */}
       <section id="reglement" className="relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20">
-          <div className="flex flex-col items-start gap-6 max-w-xl">
+          <div className="flex flex-col items-start gap-6 w-full max-w-3xl">
             <div>
               <p className="text-forest/50 text-sm font-bold uppercase tracking-widest mb-2">{t.aSavoir}</p>
               <h2 className="font-display font-black text-4xl md:text-5xl text-forest">{t.reglementOfficiel}</h2>
             </div>
             <div className="w-16 h-1 rounded-full" style={{ background: '#c8e832' }} />
             {rulesAvail ? (
-              <a
-                href={`${import.meta.env.VITE_API_URL || ''}/api/public/document/rules`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-6 py-3 rounded-xl text-sm transition-all active:scale-95"
-              >
-                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-                {t.consulterReglement}
-              </a>
+              <>
+                {/* iframe PDF — desktop uniquement */}
+                <iframe
+                  src={`${import.meta.env.VITE_API_URL || ''}/api/public/document/rules`}
+                  title={t.reglementOfficiel}
+                  className="hidden sm:block w-full rounded-lg"
+                  style={{ height: '600px', border: '1px solid #e8e5de', borderRadius: '8px' }}
+                />
+                {/* Bouton — toujours visible */}
+                <a
+                  href={`${import.meta.env.VITE_API_URL || ''}/api/public/document/rules`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-6 py-3 rounded-xl text-sm transition-all active:scale-95"
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  {t.consulterReglement}
+                </a>
+              </>
             ) : (
               <p className="text-forest/40 text-sm italic">{t.reglement} — {lang === 'fr' ? 'bientôt disponible' : 'coming soon'}</p>
             )}
