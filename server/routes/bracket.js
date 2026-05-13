@@ -690,4 +690,57 @@ router.get('/consolante', async (req, res) => {
   }
 });
 
+// ─── PATCH /api/bracket/phase-format ─────────────────────────────────────────
+// Met à jour le setFormat de tous les matchs non joués d'une phase donnée.
+// Permet à l'admin de configurer le format de set avant chaque round.
+//
+// Body : { phase: string, setFormat: { target, maxSets, tiebreakatDeuce } }
+
+const VALID_BRACKET_PHASES = [
+  'pool', 'consolante_pool', 'consolante_barrage',
+  'r64', 'r32', 'r16', 'qf', 'sf', 'final',
+  'consolante_r32', 'consolante_r16', 'consolante_qf', 'consolante_sf', 'consolante_final',
+];
+
+router.patch('/phase-format', async (req, res) => {
+  try {
+    const { phase, setFormat } = req.body;
+
+    if (!phase || !VALID_BRACKET_PHASES.includes(phase)) {
+      return res.status(400).json({ error: `phase invalide ou manquante` });
+    }
+    if (!setFormat || typeof setFormat !== 'object') {
+      return res.status(400).json({ error: 'setFormat requis (objet)' });
+    }
+
+    const { target, maxSets, tiebreakatDeuce } = setFormat;
+    if (target !== undefined && (typeof target !== 'number' || target < 1 || target > 9)) {
+      return res.status(400).json({ error: 'target doit être un nombre entre 1 et 9' });
+    }
+    if (maxSets !== undefined && (typeof maxSets !== 'number' || maxSets < 1 || maxSets > 9)) {
+      return res.status(400).json({ error: 'maxSets doit être un nombre entre 1 et 9' });
+    }
+
+    const tournament = await Tournament.findOne();
+    if (!tournament) return res.status(404).json({ error: 'Aucun tournoi configuré' });
+
+    const cleanFormat = {};
+    if (target        !== undefined) cleanFormat.target          = target;
+    if (maxSets       !== undefined) cleanFormat.maxSets         = maxSets;
+    if (tiebreakatDeuce !== undefined) cleanFormat.tiebreakatDeuce = tiebreakatDeuce;
+
+    const { modifiedCount } = await Match.updateMany(
+      { tournament: tournament._id, phase, played: false },
+      { $set: { setFormat: cleanFormat } }
+    );
+
+    res.json({
+      message:       `Format mis à jour sur ${modifiedCount} match(s) non joués de la phase "${phase}"`,
+      modifiedCount,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
 module.exports = router;

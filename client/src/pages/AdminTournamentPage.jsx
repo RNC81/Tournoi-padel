@@ -77,31 +77,53 @@ function toDateInput(isoDate) {
 
 // ─── Sous-composant : ligne de format de set ──────────────────────────────────
 
+const SELECT_CLS = 'bg-dark-700 border border-white/10 rounded-lg text-white text-sm px-2 py-1.5 focus:outline-none focus:border-white/30';
+
 function FormatRow({ label, value, onChange }) {
-  const cycle = (field, options) => {
-    const idx = options.indexOf(value[field]);
-    onChange(field, options[(idx + 1) % options.length]);
-  };
-
-  const ToggleBtn = ({ field, options, display }) => (
-    <button
-      onClick={() => cycle(field, options)}
-      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-colors"
-    >
-      <span className="text-white/40 text-xs">
-        {field === 'target' ? 'Cible' : field === 'maxSets' ? 'Sets' : 'Égalité'}
-      </span>
-      <span className="text-white font-semibold">{display(value[field])}</span>
-    </button>
-  );
-
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-white/5 last:border-0">
       <span className="text-white/70 text-sm min-w-[12rem]">{label}</span>
-      <div className="flex gap-2">
-        <ToggleBtn field="target"          options={[4, 6]}        display={v => `${v} jeux`}         />
-        <ToggleBtn field="maxSets"         options={[1, 2, 3]}     display={v => `Best of ${v * 2 - 1}`} />
-        <ToggleBtn field="tiebreakatDeuce" options={[true, false]}  display={v => v ? 'Tie-break' : 'Continue'} />
+      <div className="flex flex-wrap gap-2">
+        {/* Jeux pour gagner un set : 1–9 */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/40 text-xs">Cible</span>
+          <select
+            value={value.target ?? 6}
+            onChange={e => onChange('target', Number(e.target.value))}
+            className={SELECT_CLS}
+          >
+            {[1,2,3,4,5,6,7,8,9].map(n => (
+              <option key={n} value={n}>{n} jeux</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Sets pour gagner le match : 1–9 */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/40 text-xs">Sets</span>
+          <select
+            value={value.maxSets ?? 2}
+            onChange={e => onChange('maxSets', Number(e.target.value))}
+            className={SELECT_CLS}
+          >
+            {[1,2,3,4,5,6,7,8,9].map(n => (
+              <option key={n} value={n}>Best of {2 * n - 1}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Tie-break ou prolongation */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/40 text-xs">Égalité</span>
+          <select
+            value={String(value.tiebreakatDeuce ?? true)}
+            onChange={e => onChange('tiebreakatDeuce', e.target.value === 'true')}
+            className={SELECT_CLS}
+          >
+            <option value="true">Tie-break</option>
+            <option value="false">Continue</option>
+          </select>
+        </div>
       </div>
     </div>
   );

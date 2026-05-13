@@ -22,6 +22,69 @@ const BRACKET_PHASES = [
 
 const BRACKET_TARGETS = [4, 8, 16, 32];
 
+// ─── SET FORMAT PANEL (consolante) ────────────────────────────────────────────
+
+const SEL_V = 'bg-dark-700 border border-white/10 rounded-lg text-white text-sm px-2 py-1.5 focus:outline-none focus:border-violet-500/50';
+
+function SetFormatPanel({ nextPhase, nextPhaseName, onApply, onSkip }) {
+  const [target,   setTarget]   = useState(6);
+  const [maxSets,  setMaxSets]  = useState(2);
+  const [tiebreak, setTiebreak] = useState(true);
+  const [loading,  setLoading]  = useState(false);
+
+  const handleApply = async () => {
+    setLoading(true);
+    try { await onApply({ target, maxSets, tiebreakatDeuce: tiebreak }); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="mb-6 bg-violet-500/8 border border-violet-500/25 rounded-xl p-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-violet-300 font-semibold text-sm mb-0.5">
+            Phase suivante : {nextPhaseName}
+          </p>
+          <p className="text-white/40 text-xs">
+            Configurez le format de set avant que les matchs commencent.
+          </p>
+        </div>
+        <button onClick={onSkip} className="text-white/25 hover:text-white/50 text-xs transition-colors shrink-0">
+          Passer →
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 mt-4">
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/40 text-xs">Cible</span>
+          <select value={target} onChange={e => setTarget(Number(e.target.value))} className={SEL_V}>
+            {[1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>{n} jeux</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/40 text-xs">Sets</span>
+          <select value={maxSets} onChange={e => setMaxSets(Number(e.target.value))} className={SEL_V}>
+            {[1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>Best of {2 * n - 1}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/40 text-xs">Égalité</span>
+          <select value={String(tiebreak)} onChange={e => setTiebreak(e.target.value === 'true')} className={SEL_V}>
+            <option value="true">Tie-break</option>
+            <option value="false">Continue</option>
+          </select>
+        </div>
+        <button
+          onClick={handleApply}
+          disabled={loading}
+          className="px-4 py-1.5 rounded-lg text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50"
+        >
+          {loading ? 'Application...' : 'Appliquer'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── SCORE MODAL ──────────────────────────────────────────────────────────────
 
 function ScoreModal({ match, onClose, onSaved }) {
@@ -877,7 +940,9 @@ export default function AdminConsolantePage() {
   const [wizardError,   setWizardError]   = useState('');
 
   // Barrage
-  const [barrageMatches, setBarrageMatches] = useState([]);
+  const [barrageMatches,  setBarrageMatches]  = useState([]);
+  // Phases pour lesquelles l'admin a déjà configuré/ignoré le format
+  const [formatDismissed, setFormatDismissed] = useState(new Set());
 
   const showToast = (type, msg) => {
     setToast({ type, msg });
@@ -991,6 +1056,20 @@ export default function AdminConsolantePage() {
   const firstPhase    = activePhases[0];
   const firstRoundCnt = byPhase[firstPhase]?.length || 1;
   const containerH    = firstRoundCnt * 88;
+
+  // Détecter si une phase consolante est terminée → proposer de configurer la suivante
+  let formatPanelPhase = null;
+  for (let i = 0; i < activePhases.length - 1; i++) {
+    const phase     = activePhases[i];
+    const matches   = byPhase[phase] || [];
+    const allDone   = matches.length > 0 && matches.every(m => m.played);
+    const nextPhase = activePhases[i + 1];
+    const nextHasScores = (byPhase[nextPhase] || []).some(m => m.played);
+    if (allDone && !nextHasScores && !formatDismissed.has(nextPhase)) {
+      formatPanelPhase = nextPhase;
+      break;
+    }
+  }
 
   if (pageView === 'loading') {
     return <div className="p-8 text-white/30 text-sm">Chargement...</div>;
@@ -1139,6 +1218,24 @@ export default function AdminConsolantePage() {
               );
             })}
           </div>
+
+          {/* Panel format round suivant */}
+          {formatPanelPhase && (
+            <SetFormatPanel
+              nextPhase={formatPanelPhase}
+              nextPhaseName={ROUND_LABELS[formatPanelPhase]}
+              onSkip={() => setFormatDismissed(s => new Set([...s, formatPanelPhase]))}
+              onApply={async (setFormat) => {
+                try {
+                  await api.patch('/bracket/phase-format', { phase: formatPanelPhase, setFormat });
+                  showToast('ok', `Format appliqué aux ${ROUND_LABELS[formatPanelPhase]}`);
+                  setFormatDismissed(s => new Set([...s, formatPanelPhase]));
+                } catch (err) {
+                  showToast('err', err.response?.data?.error || 'Erreur');
+                }
+              }}
+            />
+          )}
 
           {/* Bracket visuel */}
           <div className="overflow-x-auto pb-4">

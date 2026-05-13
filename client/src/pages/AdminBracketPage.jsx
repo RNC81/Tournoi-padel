@@ -242,6 +242,80 @@ function MatchCard({ match, onScoreClick, isFinal }) {
   );
 }
 
+// ─── SET FORMAT PANEL ─────────────────────────────────────────────────────────
+// Affiché quand une phase est terminée, pour configurer le format du round suivant.
+
+const SEL = 'bg-dark-700 border border-white/10 rounded-lg text-white text-sm px-2 py-1.5 focus:outline-none focus:border-primary-500/50';
+
+function SetFormatPanel({ nextPhase, nextPhaseName, onApply, onSkip }) {
+  const [target,   setTarget]   = useState(6);
+  const [maxSets,  setMaxSets]  = useState(2);
+  const [tiebreak, setTiebreak] = useState(true);
+  const [loading,  setLoading]  = useState(false);
+
+  const handleApply = async () => {
+    setLoading(true);
+    try {
+      await onApply({ target, maxSets, tiebreakatDeuce: tiebreak });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mb-6 bg-primary-500/8 border border-primary-500/25 rounded-xl p-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-primary-300 font-semibold text-sm mb-0.5">
+            Phase suivante : {nextPhaseName}
+          </p>
+          <p className="text-white/40 text-xs">
+            Configurez le format de set avant que les matchs commencent.
+          </p>
+        </div>
+        <button onClick={onSkip} className="text-white/25 hover:text-white/50 text-xs transition-colors shrink-0">
+          Passer →
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mt-4">
+        {/* Jeux cible : 1–9 */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/40 text-xs">Cible</span>
+          <select value={target} onChange={e => setTarget(Number(e.target.value))} className={SEL}>
+            {[1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>{n} jeux</option>)}
+          </select>
+        </div>
+
+        {/* Sets : 1–9 */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/40 text-xs">Sets</span>
+          <select value={maxSets} onChange={e => setMaxSets(Number(e.target.value))} className={SEL}>
+            {[1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>Best of {2 * n - 1}</option>)}
+          </select>
+        </div>
+
+        {/* Tie-break */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-white/40 text-xs">Égalité</span>
+          <select value={String(tiebreak)} onChange={e => setTiebreak(e.target.value === 'true')} className={SEL}>
+            <option value="true">Tie-break</option>
+            <option value="false">Continue</option>
+          </select>
+        </div>
+
+        <button
+          onClick={handleApply}
+          disabled={loading}
+          className="px-4 py-1.5 rounded-lg text-sm font-semibold bg-primary-500 hover:bg-primary-400 text-white transition-colors disabled:opacity-50"
+        >
+          {loading ? 'Application...' : 'Appliquer'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── BRACKET ROUND ────────────────────────────────────────────────────────────
 // Une colonne du bracket (une phase)
 
@@ -395,6 +469,8 @@ export default function AdminBracketPage() {
   const [qualifiedCount, setQualifiedCount] = useState(0);
   const [scoreMatch,     setScoreMatch]     = useState(null);
   const [toast,          setToast]          = useState(null);
+  // Phases pour lesquelles l'admin a déjà configuré/ignoré le format
+  const [formatDismissed, setFormatDismissed] = useState(new Set());
 
   const showToast = (type, msg) => {
     setToast({ type, msg });
@@ -435,6 +511,24 @@ export default function AdminBracketPage() {
   const firstRoundCount = byPhase[firstPhase]?.length || 1;
   const SLOT_H          = 88;  // px par match dans la première colonne
   const containerHeight = firstRoundCount * SLOT_H;
+
+  // Détecter si une phase est terminée → proposer de configurer la suivante
+  // Trouver la dernière phase où tous les matchs sont joués
+  const allPhasesInBracket = ALL_PHASES.filter(p => byPhase[p]?.length > 0);
+  let formatPanelPhase = null;
+  for (let i = 0; i < allPhasesInBracket.length - 1; i++) {
+    const phase    = allPhasesInBracket[i];
+    const matches  = byPhase[phase] || [];
+    const allDone  = matches.length > 0 && matches.every(m => m.played);
+    const nextPhase = allPhasesInBracket[i + 1];
+    const nextHasScores = (byPhase[nextPhase] || []).some(m => m.played);
+    // Afficher le panel si la phase est terminée, la suivante n'a pas encore de scores,
+    // et l'admin n'a pas déjà configuré/ignoré ce round
+    if (allDone && !nextHasScores && !formatDismissed.has(nextPhase)) {
+      formatPanelPhase = nextPhase;
+      break;
+    }
+  }
 
   if (loading) return <div className="p-8 text-white/30 text-sm">Chargement...</div>;
 
@@ -492,6 +586,24 @@ export default function AdminBracketPage() {
               );
             })}
           </div>
+
+          {/* Panel format round suivant */}
+          {formatPanelPhase && (
+            <SetFormatPanel
+              nextPhase={formatPanelPhase}
+              nextPhaseName={ROUND_LABELS[formatPanelPhase]}
+              onSkip={() => setFormatDismissed(s => new Set([...s, formatPanelPhase]))}
+              onApply={async (setFormat) => {
+                try {
+                  await api.patch('/bracket/phase-format', { phase: formatPanelPhase, setFormat });
+                  showToast('ok', `Format appliqué aux ${ROUND_LABELS[formatPanelPhase]}`);
+                  setFormatDismissed(s => new Set([...s, formatPanelPhase]));
+                } catch (err) {
+                  showToast('err', err.response?.data?.error || 'Erreur');
+                }
+              }}
+            />
+          )}
 
           {/* Bracket visuel — scroll horizontal sur mobile */}
           <div className="overflow-x-auto pb-4">
