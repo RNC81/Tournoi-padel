@@ -8,6 +8,51 @@ import publicApi from '../utils/publicApi';
 import usePolling from '../hooks/usePolling';
 import { formatTeamName } from '../utils/formatTeam';
 
+// ─── Traductions FR/EN ────────────────────────────────────────────────────────
+
+const T = {
+  fr: {
+    tabs:        { groupes: 'Poules', bracket: 'Bracket', consolante: 'Consolante' },
+    updatedAt:   (t) => `Mis à jour à ${t}`,
+    loading:     'Chargement du tournoi…',
+    errorMain:   'Impossible de contacter le serveur.',
+    errorSub:    'La page se rafraîchit automatiquement toutes les 15 secondes.',
+    notStarted:  "Le tournoi n'a pas encore commencé",
+    notAvail:    (l) => `Les ${l} ne sont pas encore disponibles`,
+    autoRefresh: 'Cette page se rafraîchit automatiquement',
+    groups:      (n, q) => `${n} groupe${n > 1 ? 's' : ''} · ${q} qualifié${q > 1 ? 's' : ''} par groupe`,
+    qualified:   'Qualifié',
+    groupLabel:  (n) => `Groupe ${n}`,
+    teams:       (n) => `${n} équipe${n > 1 ? 's' : ''}`,
+    matches:     (p, t) => `${p}/${t} matchs joués`,
+    showMatches: 'Voir les matchs',
+    hideMatches: 'Masquer les matchs',
+    loadingM:    'Chargement…',
+    noMatches:   'Aucun match enregistré',
+    noBracket:   'Le bracket n\'est pas encore disponible.',
+  },
+  en: {
+    tabs:        { groupes: 'Groups', bracket: 'Bracket', consolante: 'Consolation' },
+    updatedAt:   (t) => `Updated at ${t}`,
+    loading:     'Loading tournament…',
+    errorMain:   'Cannot reach the server.',
+    errorSub:    'The page refreshes automatically every 15 seconds.',
+    notStarted:  'The tournament hasn\'t started yet',
+    notAvail:    (l) => `${l} not yet available`,
+    autoRefresh: 'This page refreshes automatically',
+    groups:      (n, q) => `${n} group${n > 1 ? 's' : ''} · ${q} qualifier${q > 1 ? 's' : ''} per group`,
+    qualified:   'Qualified',
+    groupLabel:  (n) => `Group ${n}`,
+    teams:       (n) => `${n} team${n > 1 ? 's' : ''}`,
+    matches:     (p, t) => `${p}/${t} matches played`,
+    showMatches: 'Show matches',
+    hideMatches: 'Hide matches',
+    loadingM:    'Loading…',
+    noMatches:   'No matches recorded',
+    noBracket:   'Bracket not yet available.',
+  },
+};
+
 // ─── Constantes bracket ───────────────────────────────────────────────────────
 
 const ROUND_LABELS = {
@@ -39,6 +84,15 @@ export default function GuestHomePage() {
   const [lastUpdate,  setLastUpdate]  = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [apiError,    setApiError]    = useState(false);
+  const [lang,        setLang]        = useState(() => localStorage.getItem('padel_lang') || 'fr');
+
+  const t = T[lang];
+
+  const toggleLang = () => setLang(l => {
+    const next = l === 'fr' ? 'en' : 'fr';
+    localStorage.setItem('padel_lang', next);
+    return next;
+  });
 
   // Charge les 5 endpoints en parallèle — allSettled pour ne pas tout bloquer
   // si un seul échoue (ex: bracket pas encore généré)
@@ -85,9 +139,9 @@ export default function GuestHomePage() {
   const qualPerGroup  = hasGroups ? Math.max(1, Math.floor(bracketTarget / groups.length)) : 2;
 
   const tabs = [
-    { id: 'groupes',    label: 'Poules',     active: hasGroups    },
-    { id: 'bracket',    label: 'Bracket',    active: hasBracket   },
-    { id: 'consolante', label: 'Consolante', active: hasConsolante },
+    { id: 'groupes',    label: t.tabs.groupes,    active: hasGroups    },
+    { id: 'bracket',    label: t.tabs.bracket,    active: hasBracket   },
+    { id: 'consolante', label: t.tabs.consolante, active: hasConsolante },
   ];
 
   return (
@@ -119,15 +173,24 @@ export default function GuestHomePage() {
               ))}
             </div>
 
-            {/* Indicateur "Mis à jour à HH:MM" */}
-            {lastUpdate && (
-              <div className="flex items-center gap-2 text-xs text-forest/40">
-                <span className="w-1.5 h-1.5 rounded-full bg-lime animate-pulse shrink-0" />
-                <span>
-                  Mis à jour à {lastUpdate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            )}
+            {/* Indicateur mise à jour + toggle FR/EN */}
+            <div className="flex items-center gap-3">
+              {lastUpdate && (
+                <div className="flex items-center gap-2 text-xs text-forest/40">
+                  <span className="w-1.5 h-1.5 rounded-full bg-lime animate-pulse shrink-0" />
+                  <span>
+                    {t.updatedAt(lastUpdate.toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-GB', { hour: '2-digit', minute: '2-digit' }))}
+                  </span>
+                </div>
+              )}
+              <button
+                onClick={toggleLang}
+                className="flex items-center gap-1 px-2 py-1 rounded-md border border-forest/15 text-xs font-semibold text-forest/50 hover:text-forest hover:border-forest/30 transition-colors"
+                title={lang === 'fr' ? 'Switch to English' : 'Passer en français'}
+              >
+                {lang === 'fr' ? 'EN' : 'FR'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -135,21 +198,21 @@ export default function GuestHomePage() {
       {/* ── Contenu ── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {loading ? (
-          <LoadingState />
+          <LoadingState t={t} />
         ) : apiError ? (
-          <ErrorState />
+          <ErrorState t={t} />
         ) : activeTab === 'groupes' ? (
           hasGroups
-            ? <GroupsTab groups={groups} qualPerGroup={qualPerGroup} />
-            : <NotStartedState label="poules" config={config} hasStarted={hasStarted} />
+            ? <GroupsTab groups={groups} qualPerGroup={qualPerGroup} lang={lang} t={t} />
+            : <NotStartedState label={t.tabs.groupes.toLowerCase()} config={config} hasStarted={hasStarted} t={t} />
         ) : activeTab === 'bracket' ? (
           hasBracket
-            ? <BracketTab data={bracket} phases={MAIN_PHASES} isFinalPhase="final" />
-            : <NotStartedState label="bracket principal" config={config} hasStarted={hasStarted} />
+            ? <BracketTab data={bracket} phases={MAIN_PHASES} isFinalPhase="final" t={t} />
+            : <NotStartedState label={lang === 'fr' ? 'bracket principal' : 'main bracket'} config={config} hasStarted={hasStarted} t={t} />
         ) : (
           hasConsolante
-            ? <BracketTab data={consolante} phases={CONSOLANTE_PHASES} isFinalPhase="consolante_final" accent="violet" />
-            : <NotStartedState label="bracket consolante" config={config} hasStarted={hasStarted} />
+            ? <BracketTab data={consolante} phases={CONSOLANTE_PHASES} isFinalPhase="consolante_final" accent="violet" t={t} />
+            : <NotStartedState label={lang === 'fr' ? 'bracket consolante' : 'consolation bracket'} config={config} hasStarted={hasStarted} t={t} />
         )}
       </div>
     </div>
@@ -158,25 +221,25 @@ export default function GuestHomePage() {
 
 // ─── États vides / erreurs ────────────────────────────────────────────────────
 
-function LoadingState() {
+function LoadingState({ t }) {
   return (
     <div className="flex flex-col items-center justify-center py-32 text-forest/30">
       <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin mb-4" />
-      <p className="text-sm">Chargement du tournoi...</p>
+      <p className="text-sm">{t.loading}</p>
     </div>
   );
 }
 
-function ErrorState() {
+function ErrorState({ t }) {
   return (
     <div className="flex flex-col items-center justify-center py-32 text-center">
-      <p className="text-forest/40 text-sm mb-2">Impossible de contacter le serveur.</p>
-      <p className="text-forest/25 text-xs">La page se rafraîchit automatiquement toutes les 30 secondes.</p>
+      <p className="text-forest/40 text-sm mb-2">{t.errorMain}</p>
+      <p className="text-forest/25 text-xs">{t.errorSub}</p>
     </div>
   );
 }
 
-function NotStartedState({ label, config, hasStarted }) {
+function NotStartedState({ label, config, hasStarted, t }) {
   return (
     <div className="flex flex-col items-center justify-center py-28 text-center">
       {/* Balle padel stylisée en SVG */}
@@ -191,7 +254,7 @@ function NotStartedState({ label, config, hasStarted }) {
         </svg>
       </div>
       <h2 className="font-display font-black text-2xl text-forest mb-3">
-        {hasStarted ? `Les ${label} ne sont pas encore disponibles` : 'Le tournoi n\'a pas encore commencé'}
+        {hasStarted ? t.notAvail(label) : t.notStarted}
       </h2>
       {config?.date && (
         <p className="text-forest/50 text-sm mb-2">
@@ -205,7 +268,7 @@ function NotStartedState({ label, config, hasStarted }) {
       )}
       <div className="flex items-center gap-2 text-xs text-forest/30 mt-4">
         <span className="w-1.5 h-1.5 rounded-full bg-lime animate-pulse" />
-        Cette page se rafraîchit automatiquement
+        {t.autoRefresh}
       </div>
     </div>
   );
@@ -213,25 +276,25 @@ function NotStartedState({ label, config, hasStarted }) {
 
 // ─── Onglet Groupes ───────────────────────────────────────────────────────────
 
-function GroupsTab({ groups, qualPerGroup }) {
+function GroupsTab({ groups, qualPerGroup, lang, t }) {
   const sorted = [...groups].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <p className="text-forest/50 text-sm">
-          {groups.length} groupes · {qualPerGroup} qualifié{qualPerGroup > 1 ? 's' : ''} par groupe
+          {t.groups(groups.length, qualPerGroup)}
         </p>
         <div className="flex items-center gap-3 text-xs text-forest/40">
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-sm bg-forest/10 border border-forest/20" />
-            Qualifié
+            {t.qualified}
           </span>
         </div>
       </div>
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {sorted.map(group => (
-          <GroupCard key={group._id} group={group} qualPerGroup={qualPerGroup} />
+          <GroupCard key={group._id} group={group} qualPerGroup={qualPerGroup} t={t} />
         ))}
       </div>
     </div>
@@ -240,7 +303,7 @@ function GroupsTab({ groups, qualPerGroup }) {
 
 // ─── GroupCard : classement + matchs lazy-loaded ──────────────────────────────
 
-function GroupCard({ group, qualPerGroup }) {
+function GroupCard({ group, qualPerGroup, t }) {
   const [showMatches, setShowMatches] = useState(false);
   const [matches,     setMatches]     = useState(null);
   const [loadingM,    setLoadingM]    = useState(false);
@@ -274,8 +337,8 @@ function GroupCard({ group, qualPerGroup }) {
           {group.name}
         </div>
         <div>
-          <p className="font-semibold text-forest text-sm">Groupe {group.name}</p>
-          <p className="text-forest/40 text-xs">{totalTeams} équipes · {playedCount}/{maxMatches} matchs joués</p>
+          <p className="font-semibold text-forest text-sm">{t.groupLabel(group.name)}</p>
+          <p className="text-forest/40 text-xs">{t.teams(totalTeams)} · {t.matches(playedCount, maxMatches)}</p>
         </div>
       </div>
 
@@ -334,10 +397,10 @@ function GroupCard({ group, qualPerGroup }) {
         className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 border-t border-forest/8 text-xs text-forest/35 hover:text-forest/60 hover:bg-forest-50 transition-colors disabled:opacity-50"
       >
         {loadingM ? (
-          <span>Chargement...</span>
+          <span>{t.loadingM}</span>
         ) : (
           <>
-            <span>{showMatches ? 'Masquer les matchs' : 'Voir les matchs'}</span>
+            <span>{showMatches ? t.hideMatches : t.showMatches}</span>
             <svg
               className={`w-3 h-3 transition-transform ${showMatches ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -352,7 +415,7 @@ function GroupCard({ group, qualPerGroup }) {
       {showMatches && matches !== null && (
         <div className="border-t border-forest/8 px-3 py-2 space-y-1.5 bg-forest-50">
           {matches.length === 0 ? (
-            <p className="text-forest/30 text-xs text-center py-2">Aucun match enregistré</p>
+            <p className="text-forest/30 text-xs text-center py-2">{t.noMatches}</p>
           ) : (
             matches.map(match => <MatchRow key={match._id} match={match} />)
           )}
@@ -405,13 +468,13 @@ function MatchRow({ match }) {
 
 // ─── Onglet Bracket ───────────────────────────────────────────────────────────
 
-function BracketTab({ data, phases, isFinalPhase, accent = 'primary' }) {
+function BracketTab({ data, phases, isFinalPhase, accent = 'primary', t }) {
   const activePhases = phases.filter(p => data[p]?.length > 0);
 
   if (activePhases.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
-        <p className="text-forest/40 text-sm">Le bracket n'est pas encore disponible.</p>
+        <p className="text-forest/40 text-sm">{t.noBracket}</p>
       </div>
     );
   }
