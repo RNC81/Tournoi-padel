@@ -11,10 +11,10 @@ const router = express.Router();
 
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 
-// Rate limiting : 100 requêtes par minute par IP
+// Rate limiting : 2000 requêtes par minute par IP (routes read-only, pas de risque critique)
 const limiter = rateLimit({
   windowMs:        60 * 1000,
-  max:             100,
+  max:             2000,
   standardHeaders: true,
   legacyHeaders:   false,
   message:         { error: 'Too many requests, please try again later' },
