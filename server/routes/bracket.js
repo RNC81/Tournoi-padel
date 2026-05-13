@@ -83,7 +83,7 @@ async function computeQualification(tournament, poolPhase, bracketTarget) {
   if (groups.length === 0) return { qualified: [], consolante: [], qualifiedMeta: [] };
 
   const tiebreaker = tournament.qualificationRules?.tiebreaker ??
-    ['points', 'setDiff', 'setsWon', 'directConfrontation'];
+    ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'];
 
   const nbGroups      = groups.length;
   const qualPerGroup  = Math.floor(bracketTarget / nbGroups);
@@ -117,9 +117,13 @@ async function computeQualification(tournament, poolPhase, bracketTarget) {
 
   wildcardCandidates.sort((a, b) => {
     for (const criterion of tiebreaker) {
-      if (criterion === 'points'  && b.points  !== a.points)  return b.points  - a.points;
-      if (criterion === 'setDiff' && b.setDiff !== a.setDiff) return b.setDiff - a.setDiff;
-      if (criterion === 'setsWon' && b.setsWon !== a.setsWon) return b.setsWon - a.setsWon;
+      if (criterion === 'wins'     && b.won      !== a.won)      return b.won      - a.won;
+      if (criterion === 'gameDiff' && b.gameDiff !== a.gameDiff) return b.gameDiff - a.gameDiff;
+      if (criterion === 'gamesWon' && b.gamesWon !== a.gamesWon) return b.gamesWon - a.gamesWon;
+      // Compatibilité descendante
+      if (criterion === 'points'  && b.points   !== a.points)   return b.points   - a.points;
+      if (criterion === 'setDiff' && b.gameDiff !== a.gameDiff) return b.gameDiff - a.gameDiff;
+      if (criterion === 'setsWon' && b.gamesWon !== a.gamesWon) return b.gamesWon - a.gamesWon;
     }
     return 0;
   });
@@ -442,7 +446,7 @@ router.post('/consolante/generate', async (req, res) => {
     } else {
       // consolanteTeams.length <= bSize : toutes qualifiées, BYEs automatiques si besoin
       const tiebreaker = tournament.qualificationRules?.tiebreaker ??
-        ['points', 'setDiff', 'setsWon', 'directConfrontation'];
+        ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'];
 
       const groupIds = [...new Set(consolanteTeams.map(t => String(t.group)).filter(Boolean))];
       const poolGroupsForSeeding = await Group.find({

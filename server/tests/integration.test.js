@@ -143,12 +143,13 @@ describe('Suite 1 — Tirage au sort', () => {
 // ─── SUITE 2 : Classements de poule ───────────────────────────────────────────
 
 describe('Suite 2 — Classements (4 équipes A > B > D > C)', () => {
-  // Groupe de 4 : A bat B, B bat C, C bat D, A bat C, A bat D, B bat D
-  // chaque match = 1 set joué → victoire = set unique
-  // A : 3 victoires → 9pts, 3 sets gagnés, 0 perdus → setDiff = +3
-  // B : 2 victoires → 6pts, 2 sets gagnés, 1 perdu  → setDiff = +1
-  // D : 1 victoire  → 3pts, 1 set gagné,  2 perdus  → setDiff = -1
-  // C : 0 victoire  → 0pts, 0 sets gagnés, 3 perdus → setDiff = -3
+  // Groupe de 4 : A bat tout le monde, B bat C et D, D bat C, C perd tout
+  // Règlement : victoire=3pts, défaite=1pt
+  // A : 3V 0D → 9pts  | gameDiff = (6+6+6)-(3+2+4) = +9
+  // B : 2V 1D → 7pts  | gameDiff = (3+6+6)-(6+1+4) = +4
+  // D : 1V 2D → 5pts  | gameDiff = (4+4+6)-(6+6+4) = -2
+  // C : 0V 3D → 3pts  | gameDiff = (2+1+4)-(6+6+6) = -11
+  // Classement : A > B > D > C (wins d'abord, gameDiff pour départager)
 
   const TEAMS = ['A', 'B', 'C', 'D'];
 
@@ -178,36 +179,36 @@ describe('Suite 2 — Classements (4 équipes A > B > D > C)', () => {
     expect(ranks.find(r => r.id === 'C').rank).toBe(4);
   });
 
-  test('A : 9 points', () => {
+  test('A : 9 pts (3V × 3pts + 0D)', () => {
     expect(standings.find(s => s.teamId === 'A').points).toBe(9);
   });
 
-  test('B : 6 points', () => {
-    expect(standings.find(s => s.teamId === 'B').points).toBe(6);
+  test('B : 7 pts (2V × 3pts + 1D × 1pt)', () => {
+    expect(standings.find(s => s.teamId === 'B').points).toBe(7);
   });
 
-  test('D : 3 points', () => {
-    expect(standings.find(s => s.teamId === 'D').points).toBe(3);
+  test('D : 5 pts (1V × 3pts + 2D × 1pt)', () => {
+    expect(standings.find(s => s.teamId === 'D').points).toBe(5);
   });
 
-  test('C : 0 points', () => {
-    expect(standings.find(s => s.teamId === 'C').points).toBe(0);
+  test('C : 3 pts (0V + 3D × 1pt)', () => {
+    expect(standings.find(s => s.teamId === 'C').points).toBe(3);
   });
 
-  test('A : setDiff +3', () => {
-    expect(standings.find(s => s.teamId === 'A').setDiff).toBe(3);
+  test('A : gameDiff +9 (jeux marqués - concédés)', () => {
+    expect(standings.find(s => s.teamId === 'A').gameDiff).toBe(9);
   });
 
-  test('B : setDiff +1', () => {
-    expect(standings.find(s => s.teamId === 'B').setDiff).toBe(1);
+  test('B : gameDiff +4', () => {
+    expect(standings.find(s => s.teamId === 'B').gameDiff).toBe(4);
   });
 
-  test('D : setDiff -1', () => {
-    expect(standings.find(s => s.teamId === 'D').setDiff).toBe(-1);
+  test('D : gameDiff -2', () => {
+    expect(standings.find(s => s.teamId === 'D').gameDiff).toBe(-2);
   });
 
-  test('C : setDiff -3', () => {
-    expect(standings.find(s => s.teamId === 'C').setDiff).toBe(-3);
+  test('C : gameDiff -11', () => {
+    expect(standings.find(s => s.teamId === 'C').gameDiff).toBe(-11);
   });
 
   test('A : 3 matchs joués, 3 victoires', () => {
@@ -505,10 +506,12 @@ describe('Suite 5 — Filtrage consolante', () => {
     ];
     const standings = computeStandings(TEAMS, MATCHES);
 
+    // C1 : 1 victoire = 3pts, C2 : 1 victoire (vs C3) + 1 défaite (vs C1) = 3+1 = 4pts
+    // C3 : 1 défaite (vs C2) = 1pt (défaite = 1pt selon règlement)
     expect(standings.find(s => s.teamId === 'C1').points).toBe(3);
-    expect(standings.find(s => s.teamId === 'C2').points).toBe(3);
-    expect(standings.find(s => s.teamId === 'C3').points).toBe(0);
-    // C3 : 2 matchs restant (1 joué perdu, 1 non joué)
+    expect(standings.find(s => s.teamId === 'C2').points).toBe(4);
+    expect(standings.find(s => s.teamId === 'C3').points).toBe(1);
+    // C3 : 1 match joué (perdu vs C2), 1 non joué (vs C1)
     expect(standings.find(s => s.teamId === 'C3').played).toBe(1);
   });
 });

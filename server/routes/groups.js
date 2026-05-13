@@ -61,7 +61,7 @@ router.get('/:id', validateObjectId, async (req, res) => {
       .populate('winner', 'name');
 
     const tiebreaker = tournament.qualificationRules?.tiebreaker ||
-      ['points', 'setDiff', 'setsWon', 'directConfrontation'];
+      ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'];
 
     const raw = computeStandings(group.teams.map(t => t._id), rawMatches, tiebreaker);
 

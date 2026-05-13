@@ -61,10 +61,10 @@ const tournamentSchema = new Schema(
       // Taille cible du bracket principal (puissance de 2 : 8, 16, 32, 64).
       bracketTarget: { type: Number, default: 32 },
 
-      // Critères de départage en ordre de priorité
+      // Critères de départage en ordre de priorité (règlement officiel)
       tiebreaker: {
         type: [String],
-        default: ['points', 'setDiff', 'setsWon', 'directConfrontation'],
+        default: ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'],
       },
     },
 
@@ -78,7 +78,7 @@ const tournamentSchema = new Schema(
       // Critères de départage (copiés depuis qualificationRules par défaut)
       tiebreaker: {
         type: [String],
-        default: ['points', 'setDiff', 'setsWon', 'directConfrontation'],
+        default: ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'],
       },
     },
   },

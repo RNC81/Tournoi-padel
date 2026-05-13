@@ -53,7 +53,7 @@ function generateMatchScore(team1Win) {
 async function printStandings(group, tournament) {
   const rawMatches = await Match.find({ _id: { $in: group.matches } });
   const tiebreaker = tournament.qualificationRules?.tiebreaker ||
-    ['points', 'setDiff', 'setsWon', 'directConfrontation'];
+    ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'];
   const standings  = computeStandings(
     group.teams.map(t => t._id || t),
     rawMatches,
@@ -71,7 +71,7 @@ async function printStandings(group, tournament) {
     const name = teamMap[String(s.teamId)] || String(s.teamId);
     console.log(
       `    ${s.rank}. ${name.padEnd(28)} ${String(s.points).padStart(2)} pts | ` +
-      `V:${s.won} D:${s.lost} | diff ${s.setDiff >= 0 ? '+' : ''}${s.setDiff}`
+      `V:${s.won} D:${s.lost} | gameDiff ${s.gameDiff >= 0 ? '+' : ''}${s.gameDiff}`
     );
   }
 }

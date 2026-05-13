@@ -139,7 +139,7 @@ router.get('/groups', async (req, res) => {
       .lean();
 
     const tiebreaker = tournament.qualificationRules?.tiebreaker ||
-      ['points', 'setDiff', 'setsWon', 'directConfrontation'];
+      ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'];
 
     const enriched = await Promise.all(groups.map(async group => {
       const standings = await enrichGroupWithStandings(group, tiebreaker);
@@ -184,7 +184,7 @@ router.get('/groups/:id', async (req, res) => {
       .lean();
 
     const tiebreaker = tournament.qualificationRules?.tiebreaker ||
-      ['points', 'setDiff', 'setsWon', 'directConfrontation'];
+      ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'];
     const standings = await enrichGroupWithStandings(group, tiebreaker);
 
     res.json({
