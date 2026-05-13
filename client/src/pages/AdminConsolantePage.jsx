@@ -426,6 +426,35 @@ function WizardStep1({ eligibleCount, format, setFormat, bracketTarget, setBrack
             )}
           </div>
         </label>
+
+        {/* Option C — Barrage */}
+        <label className={`flex items-start gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
+          format === 'barrage'
+            ? 'border-violet-500/60 bg-violet-500/8'
+            : 'border-white/10 bg-dark-700 hover:border-white/20'
+        }`}>
+          <input
+            type="radio"
+            name="format"
+            value="barrage"
+            checked={format === 'barrage'}
+            onChange={() => setFormat('barrage')}
+            className="mt-0.5 accent-violet-500"
+          />
+          <div className="flex-1">
+            <div className="text-white font-semibold text-sm mb-0.5">Option C — Barrage</div>
+            <div className="text-white/40 text-xs">
+              Les équipes jouent un match de barrage (knock-out immédiat) avant d'entrer dans la consolante.
+              Les perdants sont éliminés, les gagnants accèdent au bracket consolante.
+            </div>
+            {format === 'barrage' && eligibleCount !== null && (
+              <div className="mt-2 text-violet-400/70 text-xs">
+                {eligibleCount} équipes → {Math.floor(eligibleCount / 2)} match{Math.floor(eligibleCount / 2) > 1 ? 's' : ''} de barrage
+                {eligibleCount % 2 === 1 && <span className="text-yellow-400/80 ml-2">· 1 BYE (impair)</span>}
+              </div>
+            )}
+          </div>
+        </label>
       </div>
 
       <button
@@ -453,7 +482,7 @@ function WizardStep2({ eligibleCount, format, bracketTarget, numGroups,
           <div className="flex justify-between text-sm">
             <dt className="text-white/40">Format</dt>
             <dd className="text-white font-medium">
-              {format === 'pool' ? 'Poules puis bracket' : 'Bracket direct'}
+              {format === 'pool' ? 'Poules puis bracket' : format === 'barrage' ? 'Barrage' : 'Bracket direct'}
             </dd>
           </div>
           <div className="flex justify-between text-sm">
@@ -482,6 +511,12 @@ function WizardStep2({ eligibleCount, format, bracketTarget, numGroups,
             Le bracket consolante sera généré après la saisie des scores de poules.
           </p>
         )}
+        {format === 'barrage' && (
+          <p className="text-white/30 text-xs mt-4 pt-4 border-t border-white/8">
+            {Math.floor(eligibleCount / 2)} match{Math.floor(eligibleCount / 2) > 1 ? 's' : ''} de barrage seront générés.
+            Après la saisie des scores, vous pourrez générer le bracket consolante avec les gagnants.
+          </p>
+        )}
       </div>
 
       {error && (
@@ -505,6 +540,100 @@ function WizardStep2({ eligibleCount, format, bracketTarget, numGroups,
         >
           {loading ? 'Lancement...' : 'Lancer la consolante'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── VUE BARRAGE CONSOLANTE ───────────────────────────────────────────────────
+
+function BarrageView({ matches, onScoreClick, onRefresh, onGenerateBracket, onDeleteBarrage }) {
+  const played    = matches.filter(m => m.played).length;
+  const allPlayed = played === matches.length && matches.length > 0;
+
+  return (
+    <div className="max-w-xl mx-auto space-y-5">
+
+      {/* Progression */}
+      <div className="bg-dark-700 border border-white/10 rounded-xl px-5 py-4 flex items-center justify-between">
+        <div>
+          <p className="text-white font-semibold text-sm">Matchs de barrage</p>
+          <p className="text-white/40 text-xs mt-0.5">
+            {played}/{matches.length} matchs joués
+            {allPlayed && ' — prêt pour le bracket consolante'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className={`w-2.5 h-2.5 rounded-full ${allPlayed ? 'bg-lime' : 'bg-violet-400 animate-pulse'}`} />
+        </div>
+      </div>
+
+      {/* Liste des matchs */}
+      <div className="space-y-2">
+        {matches.map(match => {
+          const t1 = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || '—';
+          const t2 = formatTeamName(match.team2?.player1, match.team2?.player2) || match.team2?.name || '—';
+          const winnerId = String(match.winner?._id || match.winner || '');
+          const t1Win = match.played && winnerId === String(match.team1?._id || match.team1);
+          const t2Win = match.played && winnerId === String(match.team2?._id || match.team2);
+
+          return (
+            <div
+              key={match._id}
+              className="bg-dark-700 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3"
+            >
+              <span className={`flex-1 text-sm font-medium truncate ${
+                t1Win ? 'text-white' : t2Win ? 'text-white/25' : 'text-white/60'
+              }`}>
+                {t1}
+              </span>
+              <div className="text-center shrink-0">
+                {match.played ? (
+                  <span className="text-white/50 text-xs font-mono">
+                    {match.sets?.map((s, i) => `${s.score1}-${s.score2}`).join(' ')}
+                  </span>
+                ) : (
+                  <span className="text-white/20 text-xs">vs</span>
+                )}
+              </div>
+              <span className={`flex-1 text-sm font-medium truncate text-right ${
+                t2Win ? 'text-white' : t1Win ? 'text-white/25' : 'text-white/60'
+              }`}>
+                {t2}
+              </span>
+              <button
+                onClick={() => onScoreClick(match)}
+                className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/15 text-violet-400 hover:bg-violet-500/25 transition-colors"
+              >
+                {match.played ? 'Modifier' : 'Score'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3">
+        <button
+          onClick={onDeleteBarrage}
+          className="px-4 py-2.5 rounded-xl text-sm font-medium border border-red-500/20 text-red-400/70 hover:text-red-400 hover:border-red-500/40 transition-colors"
+        >
+          Supprimer le barrage
+        </button>
+        <button
+          onClick={onRefresh}
+          className="px-4 py-2.5 rounded-xl text-sm font-medium border border-white/10 text-white/40 hover:text-white/60 transition-colors"
+        >
+          Rafraîchir
+        </button>
+        {allPlayed && (
+          <button
+            onClick={onGenerateBracket}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+          >
+            Générer le bracket consolante →
+          </button>
+        )}
       </div>
     </div>
   );
@@ -723,7 +852,7 @@ function ConsolanteGroupCard({ group, onScoreClick }) {
 // ─── PAGE PRINCIPALE ──────────────────────────────────────────────────────────
 
 export default function AdminConsolantePage() {
-  // Vue active : 'loading' | 'wizard' | 'pools' | 'bracket'
+  // Vue active : 'loading' | 'wizard' | 'pools' | 'barrage' | 'bracket'
   const [pageView, setPageView] = useState('loading');
 
   // Données bracket
@@ -746,6 +875,9 @@ export default function AdminConsolantePage() {
   const [eligibleCount, setEligibleCount] = useState(null);
   const [wizardLoading, setWizardLoading] = useState(false);
   const [wizardError,   setWizardError]   = useState('');
+
+  // Barrage
+  const [barrageMatches, setBarrageMatches] = useState([]);
 
   const showToast = (type, msg) => {
     setToast({ type, msg });
@@ -789,12 +921,22 @@ export default function AdminConsolantePage() {
         eligible = teamsRes.data.filter(tm => tm.group && tm.tournamentPath === null).length;
       } catch (_) {}
 
+      // 5. Matchs barrage consolante
+      let barrage = [];
+      try {
+        const barrageRes = await api.get('/bracket/consolante/barrage');
+        barrage = barrageRes.data || [];
+      } catch (_) {}
+
       setByPhase(newByPhase);
       setTournament(t);
       setEligibleCount(eligible);
+      setBarrageMatches(barrage);
 
       if (hasBracket) {
         setPageView('bracket');
+      } else if (barrage.length > 0) {
+        setPageView('barrage');
       } else if (hasPools) {
         setPageView('pools');
       } else {
@@ -822,6 +964,10 @@ export default function AdminConsolantePage() {
           bracketTarget,
         });
         showToast('ok', 'Bracket consolante généré !');
+      } else if (format === 'barrage') {
+        // Option C : génère les matchs de barrage
+        await api.post('/bracket/consolante/barrage', {});
+        showToast('ok', 'Matchs de barrage créés — saisissez les scores pour filtrer les équipes.');
       } else {
         // Option A : tirage des poules consolante
         await api.post('/groups/draw', {
@@ -873,6 +1019,7 @@ export default function AdminConsolantePage() {
         <p className="text-white/40 text-sm">
           {pageView === 'wizard'  && 'Configuration de la consolante'}
           {pageView === 'pools'   && 'Phase de poules consolante'}
+          {pageView === 'barrage' && 'Matchs de barrage'}
           {pageView === 'bracket' && activePhases.map(p => ROUND_LABELS[p]).join(' → ')}
         </p>
       </div>
@@ -927,6 +1074,34 @@ export default function AdminConsolantePage() {
             />
           )}
         </div>
+      )}
+
+      {/* ── BARRAGE CONSOLANTE ────────────────────────────────────────────── */}
+      {pageView === 'barrage' && (
+        <BarrageView
+          matches={barrageMatches}
+          onScoreClick={match => setScoreMatch(match)}
+          onRefresh={fetchAll}
+          onGenerateBracket={async () => {
+            try {
+              await api.post('/bracket/consolante/generate', { direct: true, bracketTarget });
+              showToast('ok', 'Bracket consolante généré !');
+              fetchAll();
+            } catch (err) {
+              showToast('err', err.response?.data?.error || 'Erreur génération bracket');
+            }
+          }}
+          onDeleteBarrage={async () => {
+            if (!window.confirm('Supprimer tous les matchs de barrage et recommencer ?')) return;
+            try {
+              await api.delete('/bracket/consolante/barrage');
+              showToast('ok', 'Barrage supprimé');
+              fetchAll();
+            } catch (err) {
+              showToast('err', err.response?.data?.error || 'Erreur suppression');
+            }
+          }}
+        />
       )}
 
       {/* ── POULES CONSOLANTE ─────────────────────────────────────────────── */}

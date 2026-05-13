@@ -161,6 +161,15 @@ router.put('/:id/score', validateObjectId, async (req, res) => {
       await Team.findByIdAndUpdate(loserId, { $set: { tournamentPath: null } });
     }
 
+    // consolante_barrage : le perdant est éliminé définitivement
+    // Le winner reste tournamentPath=null (éligible pour le bracket consolante)
+    if (match.phase === 'consolante_barrage' && winner) {
+      const loserId = winner.toString() === match.team1.toString()
+        ? match.team2
+        : match.team1;
+      await Team.findByIdAndUpdate(loserId, { $set: { tournamentPath: 'eliminated' } });
+    }
+
     // Propagation bracket (phases knockout uniquement)
     if (NEXT_PHASE[match.phase]) {
       await propagateWinner(match);
@@ -232,6 +241,16 @@ router.delete('/:id/score', validateObjectId, async (req, res) => {
         : match.team1;
       if (loserId) {
         await Team.findByIdAndUpdate(loserId, { $set: { tournamentPath: 'main' } });
+      }
+    }
+
+    // consolante_barrage : réversibilité — le perdant revient à null (éligible barrage)
+    if (match.phase === 'consolante_barrage' && hadWinner) {
+      const loserId = hadWinner.toString() === match.team1?.toString()
+        ? match.team2
+        : match.team1;
+      if (loserId) {
+        await Team.findByIdAndUpdate(loserId, { $set: { tournamentPath: null } });
       }
     }
 

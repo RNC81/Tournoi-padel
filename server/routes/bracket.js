@@ -511,6 +511,121 @@ router.post('/consolante/generate', async (req, res) => {
   }
 });
 
+// ─── POST /api/bracket/consolante/barrage ────────────────────────────────────
+// Option C : génère des matchs de barrage (phase='consolante_barrage') entre les
+// équipes non-qualifiées (tournamentPath=null, group!=null).
+// Les équipes sont appariées en matchs simples (premier vs dernier, etc.).
+// Winners restent tournamentPath=null (éligibles pour consolante generate),
+// Losers passent à tournamentPath='eliminated' lors de la saisie du score.
+//
+// Body : {} (aucun paramètre requis)
+
+router.post('/consolante/barrage', async (req, res) => {
+  try {
+    const tournament = await Tournament.findOne();
+    if (!tournament) return res.status(404).json({ error: 'Aucun tournoi configuré' });
+
+    // Vérifier qu'il n'y a pas déjà des matchs barrage
+    const existingBarrage = await Match.countDocuments({
+      tournament: tournament._id,
+      phase: 'consolante_barrage',
+    });
+    if (existingBarrage > 0) {
+      return res.status(409).json({
+        error: 'Des matchs de barrage existent déjà. Supprimez-les avant de relancer.',
+      });
+    }
+
+    // Équipes éligibles : ont fait les poules principales, pas encore qualifiées
+    const eligibleTeams = await Team.find({ group: { $ne: null }, tournamentPath: null });
+
+    if (eligibleTeams.length < 2) {
+      return res.status(400).json({
+        error: `Pas assez d'équipes pour le barrage (minimum 2, trouvé ${eligibleTeams.length}).`,
+      });
+    }
+
+    // Appariement : on mélange aléatoirement, puis on apparie les consécutifs
+    // (pas de seeding ici — le barrage est un pré-filtrage rapide)
+    const shuffled = [...eligibleTeams].sort(() => Math.random() - 0.5);
+
+    const matchIds = [];
+    for (let i = 0; i + 1 < shuffled.length; i += 2) {
+      const match = await Match.create({
+        tournament: tournament._id,
+        phase:      'consolante_barrage',
+        team1:      shuffled[i]._id,
+        team2:      shuffled[i + 1]._id,
+        setFormat:  tournament.consolantePoolFormat || {},
+        position:   Math.floor(i / 2) + 1,
+      });
+      matchIds.push(match._id);
+    }
+
+    // Si nombre impair : la dernière équipe passe directement (BYE)
+    const byeTeam = shuffled.length % 2 === 1 ? shuffled[shuffled.length - 1] : null;
+
+    res.status(201).json({
+      message:      `${matchIds.length} match(s) de barrage créé(s)`,
+      matchCount:   matchIds.length,
+      byeTeam:      byeTeam ? byeTeam.name || byeTeam.player1 : null,
+      eligibleCount: eligibleTeams.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
+// ─── DELETE /api/bracket/consolante/barrage ───────────────────────────────────
+// Supprime tous les matchs barrage (reset pour relancer).
+
+router.delete('/consolante/barrage', async (req, res) => {
+  try {
+    const tournament = await Tournament.findOne();
+    if (!tournament) return res.status(404).json({ error: 'Aucun tournoi configuré' });
+
+    const { deletedCount } = await Match.deleteMany({
+      tournament: tournament._id,
+      phase:      'consolante_barrage',
+    });
+
+    // Remettre en null les équipes qui avaient été marquées 'eliminated' via barrage
+    // (on ne peut pas distinguer, donc on remet toutes les équipes group!=null+eliminated à null)
+    // Note : cette réversibilité est partielle — si des scores avaient été saisis, on reset.
+    await Team.updateMany(
+      { tournament: tournament._id, group: { $ne: null }, tournamentPath: 'eliminated' },
+      { $set: { tournamentPath: null } }
+    );
+
+    res.json({ message: `${deletedCount} match(s) de barrage supprimé(s)`, deletedCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
+// ─── GET /api/bracket/consolante/barrage ─────────────────────────────────────
+// Retourne les matchs de barrage avec équipes populées.
+
+router.get('/consolante/barrage', async (req, res) => {
+  try {
+    const tournament = await Tournament.findOne();
+    if (!tournament) return res.status(404).json({ error: 'Aucun tournoi configuré' });
+
+    const matches = await Match.find({
+      tournament: tournament._id,
+      phase:      'consolante_barrage',
+    })
+      .populate('team1',  'name player1 player2 country')
+      .populate('team2',  'name player1 player2 country')
+      .populate('winner', 'name player1 player2')
+      .sort({ position: 1 });
+
+    res.json(matches);
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // ─── GET /api/bracket ─────────────────────────────────────────────────────────
 // Retourne les matchs du bracket principal groupés par phase.
 
