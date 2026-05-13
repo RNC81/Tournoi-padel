@@ -68,6 +68,49 @@ router.get('/config', async (req, res) => {
   }
 });
 
+// ─── GET /api/public/document/schedule/preview ───────────────────────────────
+// Retourne le contenu du fichier horaires en JSON (sans clé API).
+// Excel/ODS → { exists: true, type: 'excel', headers: [...], rows: [[...]] }
+// PDF       → { exists: true, type: 'pdf', url: '...' }
+// Absent    → { exists: false }
+
+router.get('/document/schedule/preview', (req, res) => {
+  let file;
+  try {
+    const files = fs.existsSync(UPLOADS_DIR) ? fs.readdirSync(UPLOADS_DIR) : [];
+    file = files.find(f => f.startsWith('schedule.'));
+  } catch {
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+
+  if (!file) return res.json({ exists: false });
+
+  const filePath = path.join(UPLOADS_DIR, file);
+  const isPdf    = file.toLowerCase().endsWith('.pdf');
+
+  if (isPdf) {
+    return res.json({
+      exists: true,
+      type:   'pdf',
+      url:    '/api/public/document/schedule',
+    });
+  }
+
+  // Excel / ODS → SheetJS
+  try {
+    const XLSX = require('xlsx');
+    const wb   = XLSX.readFile(filePath, { cellDates: true });
+    const ws   = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    // Supprimer les lignes entièrement vides
+    const rows = data.filter(r => r.some(c => c !== '' && c != null));
+    const headers = rows[0] || [];
+    return res.json({ exists: true, type: 'excel', headers, rows: rows.slice(1) });
+  } catch {
+    return res.status(500).json({ error: 'Impossible de lire le fichier' });
+  }
+});
+
 // ─── GET /api/public/document/:type ──────────────────────────────────────────
 // Sert un document uploadé (règlement PDF ou horaires Excel) sans clé API.
 // ?info=1 → retourne les métadonnées JSON au lieu du fichier.

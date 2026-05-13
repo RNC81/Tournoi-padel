@@ -177,7 +177,7 @@ export default function GuestHomePage() {
             ? <BracketTab data={consolante} phases={CONSOLANTE_PHASES} isFinalPhase="consolante_final" accent="violet" t={t} />
             : <NotStartedState label={lang === 'fr' ? 'bracket consolante' : 'consolation bracket'} config={config} hasStarted={hasStarted} t={t} />
         ) : (
-          <ScheduleTab info={scheduleInfo} t={t} />
+          <ScheduleTab t={t} />
         )}
       </div>
     </div>
@@ -440,11 +440,30 @@ function MatchRow({ match }) {
 
 // ─── Onglet Horaires ──────────────────────────────────────────────────────────
 
-function ScheduleTab({ info, t }) {
+function ScheduleTab({ t }) {
+  const [preview,  setPreview]  = useState(null);   // null = chargement en cours
+  const [loadErr,  setLoadErr]  = useState(false);
   const scheduleUrl = `${import.meta.env.VITE_API_URL || ''}/api/public/document/schedule`;
-  const isPdf = info?.filename?.toLowerCase().endsWith('.pdf');
 
-  if (!info) {
+  // Chargement lazy au montage du composant (l'onglet vient d'être sélectionné)
+  useEffect(() => {
+    publicApi.get('/document/schedule/preview')
+      .then(r => setPreview(r.data))
+      .catch(() => { setPreview({ exists: false }); setLoadErr(true); });
+  }, []);
+
+  // ── Chargement ────────────────────────────────────────────────────────────
+  if (preview === null) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 text-forest/30">
+        <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-sm">{t.loadingM}</p>
+      </div>
+    );
+  }
+
+  // ── Pas de fichier ────────────────────────────────────────────────────────
+  if (!preview.exists) {
     return (
       <div className="flex flex-col items-center justify-center py-28 text-center">
         <div className="w-14 h-14 rounded-full mb-5 flex items-center justify-center" style={{ background: '#c8e832' }}>
@@ -453,9 +472,7 @@ function ScheduleTab({ info, t }) {
               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
           </svg>
         </div>
-        <h2 className="font-display font-black text-2xl text-forest mb-3">
-          {t.scheduleNotReady}
-        </h2>
+        <h2 className="font-display font-black text-2xl text-forest mb-3">{t.scheduleNotReady}</h2>
         <div className="flex items-center gap-2 text-xs text-forest/30 mt-4">
           <span className="w-1.5 h-1.5 rounded-full bg-lime animate-pulse" />
           {t.autoRefresh}
@@ -464,34 +481,72 @@ function ScheduleTab({ info, t }) {
     );
   }
 
-  const dlBtn = (
-    <a
-      href={scheduleUrl}
-      download={info.filename}
-      className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-7 py-3.5 rounded-xl text-base transition-all active:scale-95"
-    >
-      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"/>
-      </svg>
-      {t.scheduleDl}
-    </a>
-  );
-
-  return (
-    <div className="space-y-4">
-      {/* iframe PDF — desktop uniquement, pas pour Excel/ODS */}
-      {isPdf && (
-        <iframe
-          src={scheduleUrl}
-          title="Horaires"
-          className="hidden sm:block w-full rounded-lg border border-forest/15"
-          style={{ height: '600px' }}
-        />
-      )}
-      <div className="flex justify-center pt-2">
-        {dlBtn}
+  // ── Tableau Excel / ODS ───────────────────────────────────────────────────
+  if (preview.type === 'excel') {
+    return (
+      <div className="space-y-4">
+        <div className="overflow-x-auto rounded-xl border border-forest/12">
+          <table className="min-w-max w-full text-xs border-collapse">
+            <thead>
+              <tr style={{ background: '#2d6a2d' }}>
+                {preview.headers.map((h, i) => (
+                  <th
+                    key={i}
+                    className="px-3 py-2 text-left text-white font-bold whitespace-nowrap"
+                  >
+                    {String(h ?? '')}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {preview.rows.map((row, ri) => (
+                <tr
+                  key={ri}
+                  style={{ background: ri % 2 === 0 ? '#ffffff' : '#f8f7f4' }}
+                >
+                  {preview.headers.map((_, ci) => (
+                    <td key={ci} className="px-3 py-1.5 text-forest/70 whitespace-nowrap border-b border-forest/5">
+                      {String(row[ci] ?? '')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-center">
+          <a
+            href={scheduleUrl}
+            download
+            className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-6 py-3 rounded-xl text-sm transition-all active:scale-95"
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"/>
+            </svg>
+            {t.scheduleDl}
+          </a>
+        </div>
       </div>
+    );
+  }
+
+  // ── Fallback PDF ──────────────────────────────────────────────────────────
+  return (
+    <div className="flex justify-center py-12">
+      <a
+        href={scheduleUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-7 py-3.5 rounded-xl text-base transition-all active:scale-95"
+      >
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        {t.scheduleDl}
+      </a>
     </div>
   );
 }
