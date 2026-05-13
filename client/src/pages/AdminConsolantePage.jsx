@@ -63,7 +63,7 @@ function SetFormatPanel({ nextPhase, nextPhaseName, onApply, onSkip }) {
         <div className="flex items-center gap-1.5">
           <span className="text-white/40 text-xs">Sets</span>
           <select value={maxSets} onChange={e => setMaxSets(Number(e.target.value))} className={SEL_V}>
-            {[1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>Best of {2 * n - 1}</option>)}
+            {[1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>Best of {n}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-1.5">

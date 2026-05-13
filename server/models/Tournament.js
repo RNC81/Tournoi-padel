@@ -40,6 +40,8 @@ const tournamentSchema = new Schema(
     // donc pas stockés ici. qf/sf/final servent de mémoire pour pré-remplir
     // le formulaire admin — la source de vérité reste Match.setFormat.
     knockoutFormat: {
+      r32:   setFormatSchema,
+      r16:   setFormatSchema,
       qf:    setFormatSchema,
       sf:    setFormatSchema,
       final: setFormatSchema,

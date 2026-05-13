@@ -27,17 +27,21 @@ const STATUS_COLORS = {
 };
 
 const FORMAT_ROWS = [
-  { key: 'poolStageFormat',                label: 'Poules principales'         },
-  { key: 'knockoutFormat.qf',              label: 'Bracket — Quarts de finale' },
-  { key: 'knockoutFormat.sf',              label: 'Bracket — Demi-finales'     },
-  { key: 'knockoutFormat.final',           label: 'Bracket — Finale'           },
-  { key: 'consolantePoolFormat',           label: 'Consolante — Poules'        },
-  { key: 'consolanteKnockoutFormat.final', label: 'Consolante — Finale'        },
+  { key: 'poolStageFormat',                label: 'Poules principales'            },
+  { key: 'knockoutFormat.r32',             label: 'Bracket — 16ème de finale'     },
+  { key: 'knockoutFormat.r16',             label: 'Bracket — 8ème de finale'      },
+  { key: 'knockoutFormat.qf',              label: 'Bracket — Quarts de finale'    },
+  { key: 'knockoutFormat.sf',              label: 'Bracket — Demi-finales'        },
+  { key: 'knockoutFormat.final',           label: 'Bracket — Finale'              },
+  { key: 'consolantePoolFormat',           label: 'Consolante — Poules'           },
+  { key: 'consolanteKnockoutFormat.final', label: 'Consolante — Finale'           },
 ];
 
 // Formats officiels du règlement IDPP (pré-remplis si la DB n'a pas encore de valeur)
 const OFFICIAL_FORMATS = {
   'poolStageFormat':                { target: 6, maxSets: 1, tiebreakatDeuce: false },
+  'knockoutFormat.r32':             { target: 9, maxSets: 1, tiebreakatDeuce: false },
+  'knockoutFormat.r16':             { target: 9, maxSets: 1, tiebreakatDeuce: false },
   'knockoutFormat.qf':              { target: 9, maxSets: 1, tiebreakatDeuce: false },
   'knockoutFormat.sf':              { target: 6, maxSets: 3, tiebreakatDeuce: false },
   'knockoutFormat.final':           { target: 6, maxSets: 3, tiebreakatDeuce: false },
@@ -68,6 +72,8 @@ function buildFormatsBody(formats) {
   return {
     poolStageFormat: formats['poolStageFormat'],
     knockoutFormat: {
+      r32:   formats['knockoutFormat.r32'],
+      r16:   formats['knockoutFormat.r16'],
       qf:    formats['knockoutFormat.qf'],
       sf:    formats['knockoutFormat.sf'],
       final: formats['knockoutFormat.final'],
@@ -117,7 +123,7 @@ function FormatRow({ label, value, onChange }) {
             className={SELECT_CLS}
           >
             {[1,2,3,4,5,6,7,8,9].map(n => (
-              <option key={n} value={n}>Best of {2 * n - 1}</option>
+              <option key={n} value={n}>Best of {n}</option>
             ))}
           </select>
         </div>

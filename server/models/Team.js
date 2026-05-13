@@ -25,6 +25,11 @@ const teamSchema = new Schema(
     // Référence à la poule dans laquelle l'équipe est placée
     group: { type: Schema.Types.ObjectId, ref: 'Group', default: null },
 
+    // Position finale dans la poule (1 = 1er, 2 = 2ème, etc.)
+    // Assigné lors de la génération du bracket principal.
+    // Utilisé pour décider BYE vs barrage en consolante (≤4 → BYE, ≥5 → barrage).
+    groupRank: { type: Number, default: null },
+
     registeredAt: { type: Date, default: Date.now },
 
     // Notes libres pour l'admin (forfaits, remplacement, contexte)

@@ -309,6 +309,21 @@ router.post('/generate', async (req, res) => {
     // les prend en charge (Option A : poules, Option B : bracket direct).
     await Team.updateMany({ _id: { $in: qualified } }, { $set: { tournamentPath: 'main' } });
 
+    // Assigner groupRank à toutes les équipes des poules (position dans leur poule).
+    // Utilisé ensuite pour séparer BYE vs barrage en consolante (≤4 → BYE, ≥5 → barrage).
+    {
+      const tiebreaker = tournament.qualificationRules?.tiebreaker ??
+        ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'];
+      const allGroups = await Group.find({ tournament: tournament._id, phase: 'pool' });
+      for (const g of allGroups) {
+        const rawMatches = await Match.find({ _id: { $in: g.matches } });
+        const standings  = computeStandings(g.teams, rawMatches, tiebreaker);
+        for (let i = 0; i < standings.length; i++) {
+          await Team.findByIdAndUpdate(standings[i].teamId, { $set: { groupRank: i + 1 } });
+        }
+      }
+    }
+
     // Mise à jour du statut du tournoi
     tournament.currentPhase = phases[0];
     tournament.status       = 'knockout';
@@ -545,9 +560,20 @@ router.post('/consolante/barrage', async (req, res) => {
       });
     }
 
-    // Appariement : on mélange aléatoirement, puis on apparie les consécutifs
-    // (pas de seeding ici — le barrage est un pré-filtrage rapide)
-    const shuffled = [...eligibleTeams].sort(() => Math.random() - 0.5);
+    // Séparation par classement en poule :
+    // groupRank ≤ 4 (ou null) → BYE direct dans le bracket consolante
+    // groupRank ≥ 5           → doivent passer par le barrage
+    const byeTeams     = eligibleTeams.filter(t => t.groupRank != null && t.groupRank <= 4);
+    const barrageTeams = eligibleTeams.filter(t => t.groupRank == null || t.groupRank >= 5);
+
+    if (barrageTeams.length < 2) {
+      return res.status(400).json({
+        error: `Pas assez d'équipes pour le barrage (minimum 2 équipes avec groupRank ≥ 5, trouvé ${barrageTeams.length}). Utilisez Option A ou B à la place.`,
+      });
+    }
+
+    // Mélange aléatoire des équipes barrage, puis appariement consécutif
+    const shuffled = [...barrageTeams].sort(() => Math.random() - 0.5);
 
     const matchIds = [];
     for (let i = 0; i + 1 < shuffled.length; i += 2) {
@@ -562,14 +588,16 @@ router.post('/consolante/barrage', async (req, res) => {
       matchIds.push(match._id);
     }
 
-    // Si nombre impair : la dernière équipe passe directement (BYE)
-    const byeTeam = shuffled.length % 2 === 1 ? shuffled[shuffled.length - 1] : null;
+    // Si nombre impair de barrageTeams : la dernière passe directement (rejoint les BYEs)
+    const extraBye = shuffled.length % 2 === 1 ? shuffled[shuffled.length - 1] : null;
+    const totalByeCount = byeTeams.length + (extraBye ? 1 : 0);
 
     res.status(201).json({
-      message:      `${matchIds.length} match(s) de barrage créé(s)`,
-      matchCount:   matchIds.length,
-      byeTeam:      byeTeam ? byeTeam.name || byeTeam.player1 : null,
-      eligibleCount: eligibleTeams.length,
+      message:        `${matchIds.length} match(s) de barrage créé(s), ${totalByeCount} équipe(s) BYE`,
+      matchCount:     matchIds.length,
+      byeTeamCount:   totalByeCount,
+      barrageCount:   barrageTeams.length,
+      eligibleCount:  eligibleTeams.length,
     });
   } catch (err) {
     res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
