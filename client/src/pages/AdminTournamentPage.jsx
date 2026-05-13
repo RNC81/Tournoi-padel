@@ -151,7 +151,7 @@ export default function AdminTournamentPage() {
 
   // Section 2 — Formats de set
   const [formats, setFormats]         = useState(() =>
-    Object.fromEntries(FORMAT_ROWS.map(r => [r.key, { ...DEFAULT_FORMAT }]))
+    Object.fromEntries(FORMAT_ROWS.map(r => [r.key, { ...(OFFICIAL_FORMATS[r.key] || { target: 6, maxSets: 1, tiebreakatDeuce: false }) }]))
   );
   const [formatsSaving, setFormatsSaving] = useState(false);
 
