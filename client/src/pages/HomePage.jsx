@@ -627,20 +627,6 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
           <div className="max-w-2xl space-y-7">
 
-            {/* Badge statut dynamique */}
-            <div className="inline-flex items-center gap-2 border border-forest/25 bg-forest/8 rounded-full px-4 py-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-lime animate-pulse' : 'bg-forest/50'}`} />
-              <span className="text-forest text-xs font-bold uppercase tracking-widest">
-                {status === 'registration' || !status
-                  ? 'Inscriptions ouvertes'
-                  : status === 'group_stage'
-                  ? 'Phase de poules en cours'
-                  : status === 'knockout'
-                  ? 'Phase finale en cours'
-                  : 'Tournoi terminé'}
-              </span>
-            </div>
-
             {/* Titre massif — empilé vertical */}
             <div className="leading-none">
               {['TOURNOI', 'PARIS', 'YAAR', 'CLUB'].map((word, i) => (
