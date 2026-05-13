@@ -535,6 +535,20 @@ export default function AdminBracketPage() {
     }
   }
 
+  // Cas spécial : r64/r32/r16 comme première phase du bracket.
+  // Ces phases reçoivent setFormat:{} à la génération — proposer de configurer
+  // le format dès que le bracket existe et avant que le premier match soit joué.
+  if (!formatPanelPhase && allPhasesInBracket.length > 0) {
+    const fp = allPhasesInBracket[0];
+    if (['r64', 'r32', 'r16'].includes(fp)) {
+      const fpMatches = byPhase[fp] || [];
+      const noneStarted = fpMatches.length > 0 && !fpMatches.some(m => m.played);
+      if (noneStarted && !formatDismissed.has(fp)) {
+        formatPanelPhase = fp;
+      }
+    }
+  }
+
   if (loading) return <div className="p-8 text-white/30 text-sm">Chargement...</div>;
 
   return (

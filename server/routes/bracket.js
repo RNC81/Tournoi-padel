@@ -58,13 +58,15 @@ function getSetFormat(phase, tournament) {
   const kf = tournament.knockoutFormat           || {};
   const cf = tournament.consolanteKnockoutFormat || {};
   return {
+    r32:               kf.r32,   // configuré dans AdminTournamentPage ou via SetFormatPanel
+    r16:               kf.r16,
     qf:                kf.qf,
     sf:                kf.sf,
     final:             kf.final,
     consolante_qf:     cf.qf,
     consolante_sf:     cf.sf,
     consolante_final:  cf.final,
-  }[phase] || {}; // r32/r16 → {} (Option C : configuré au lancement du round)
+  }[phase] || {}; // fallback {} si non configuré → admin ajuste via SetFormatPanel
 }
 
 // Calcule la qualification depuis les poules d'une phase donnée.
