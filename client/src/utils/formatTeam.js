@@ -12,6 +12,13 @@
  *   - player manquant → remplacé par chaîne vide
  *   - les deux manquants → "—"
  */
+// formatTeamLabel(team) — affiche "#N · Prénom1 I. / Prénom2 I." si le numéro existe
+export function formatTeamLabel(team) {
+  if (!team) return '—';
+  const name = formatTeamName(team.player1, team.player2) || team.name || '—';
+  return team.teamNumber != null ? `#${team.teamNumber} · ${name}` : name;
+}
+
 export function formatTeamName(player1, player2) {
   const fmt = (p) => {
     if (!p) return '';

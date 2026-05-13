@@ -133,7 +133,7 @@ router.get('/groups', async (req, res) => {
     if (req.query.phase) filter.phase = req.query.phase;
 
     const groups = await Group.find(filter)
-      .populate('teams', 'name player1 player2 country tournamentPath')
+      .populate('teams', 'name player1 player2 country tournamentPath teamNumber')
       .select('-__v')
       .sort({ name: 1 })
       .lean();
@@ -171,14 +171,14 @@ router.get('/groups/:id', async (req, res) => {
     if (!tournament) return res.status(404).json({ error: 'Aucun tournoi configuré' });
 
     const group = await Group.findById(req.params.id)
-      .populate('teams', 'name player1 player2 country tournamentPath')
+      .populate('teams', 'name player1 player2 country tournamentPath teamNumber')
       .select('-__v')
       .lean();
     if (!group) return res.status(404).json({ error: 'Groupe introuvable' });
 
     const populatedMatches = await Match.find({ _id: { $in: group.matches } })
-      .populate('team1',  'name player1 player2')
-      .populate('team2',  'name player1 player2')
+      .populate('team1',  'name player1 player2 teamNumber')
+      .populate('team2',  'name player1 player2 teamNumber')
       .populate('winner', 'name')
       .select('-__v -setFormat')
       .lean();
@@ -213,8 +213,8 @@ router.get('/bracket', async (req, res) => {
       tournament: tournament._id,
       phase:      { $in: phases },
     })
-      .populate('team1',  'name player1 player2 country')
-      .populate('team2',  'name player1 player2 country')
+      .populate('team1',  'name player1 player2 country teamNumber')
+      .populate('team2',  'name player1 player2 country teamNumber')
       .populate('winner', 'name')
       .select('-__v -setFormat')
       .sort({ position: 1 })
@@ -248,8 +248,8 @@ router.get('/bracket/consolante', async (req, res) => {
       tournament: tournament._id,
       phase:      { $in: phases },
     })
-      .populate('team1',  'name player1 player2 country')
-      .populate('team2',  'name player1 player2 country')
+      .populate('team1',  'name player1 player2 country teamNumber')
+      .populate('team2',  'name player1 player2 country teamNumber')
       .populate('winner', 'name')
       .select('-__v -setFormat')
       .sort({ position: 1 })

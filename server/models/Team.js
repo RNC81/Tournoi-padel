@@ -25,6 +25,11 @@ const teamSchema = new Schema(
     // Référence à la poule dans laquelle l'équipe est placée
     group: { type: Schema.Types.ObjectId, ref: 'Group', default: null },
 
+    // Numéro d'équipe unique (attribué par l'admin, ordre d'inscription par défaut)
+    // Pas de default:null — le champ est absent des docs sans numéro, ce qui
+    // permet l'index sparse unique (exclut les docs où le champ est absent).
+    teamNumber: { type: Number, unique: true, sparse: true },
+
     // Position finale dans la poule (1 = 1er, 2 = 2ème, etc.)
     // Assigné lors de la génération du bracket principal.
     // Utilisé pour décider BYE vs barrage en consolante (≤4 → BYE, ≥5 → barrage).

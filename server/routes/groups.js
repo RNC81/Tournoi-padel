@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
     if (req.query.phase) filter.phase = req.query.phase;
 
     const groups = await Group.find(filter)
-      .populate('teams', 'name player1 player2 country tournamentPath')
+      .populate('teams', 'name player1 player2 country tournamentPath teamNumber')
       .sort({ name: 1 });
 
     res.json(groups);
@@ -48,7 +48,7 @@ router.get('/:id', validateObjectId, async (req, res) => {
     if (!tournament) return res.status(404).json({ error: 'Aucun tournoi configuré' });
 
     const group = await Group.findById(req.params.id)
-      .populate('teams', 'name player1 player2 country tournamentPath');
+      .populate('teams', 'name player1 player2 country tournamentPath teamNumber');
     if (!group) return res.status(404).json({ error: 'Groupe introuvable' });
 
     // Matchs bruts pour le calcul des standings (team1/team2 = ObjectIds)
@@ -56,8 +56,8 @@ router.get('/:id', validateObjectId, async (req, res) => {
 
     // Matchs enrichis pour la réponse (équipes populées)
     const matchesFetched = await Match.find({ _id: { $in: group.matches } })
-      .populate('team1',  'name player1 player2')
-      .populate('team2',  'name player1 player2')
+      .populate('team1',  'name player1 player2 teamNumber')
+      .populate('team2',  'name player1 player2 teamNumber')
       .populate('winner', 'name');
 
     // Respecter l'ordre de group.matches (MongoDB $in ne garantit pas l'ordre)

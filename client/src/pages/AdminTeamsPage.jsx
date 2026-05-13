@@ -62,11 +62,12 @@ function Modal({ title, onClose, children, wide = false }) {
 
 function TeamForm({ initial = {}, onSave, onCancel, loading }) {
   const [form, setForm] = useState({
-    name:    initial.name    || '',
-    player1: initial.player1 || '',
-    player2: initial.player2 || '',
-    country: initial.country || '',
-    notes:   initial.notes   || '',
+    name:       initial.name       || '',
+    player1:    initial.player1    || '',
+    player2:    initial.player2    || '',
+    country:    initial.country    || '',
+    notes:      initial.notes      || '',
+    teamNumber: initial.teamNumber != null ? String(initial.teamNumber) : '',
   });
   const [error, setError] = useState('');
 
@@ -76,7 +77,12 @@ function TeamForm({ initial = {}, onSave, onCancel, loading }) {
     e.preventDefault();
     setError('');
     try {
-      await onSave(form);
+      // Convertir teamNumber en Number ou null avant d'envoyer
+      const payload = {
+        ...form,
+        teamNumber: form.teamNumber !== '' ? Number(form.teamNumber) : null,
+      };
+      await onSave(payload);
     } catch (err) {
       setError(err.response?.data?.error || 'Erreur lors de la sauvegarde');
     }
@@ -123,6 +129,17 @@ function TeamForm({ initial = {}, onSave, onCancel, loading }) {
       <div>
         <label className="block text-xs text-white/50 mb-1.5">Notes internes <span className="text-white/25">(optionnel)</span></label>
         <input className="input" value={form.notes} onChange={set('notes')} placeholder="Numéro de contact, remarques..." />
+      </div>
+      <div>
+        <label className="block text-xs text-white/50 mb-1.5">Numéro d'équipe <span className="text-white/25">(optionnel — auto-assigné)</span></label>
+        <input
+          className="input"
+          type="number"
+          min="1"
+          value={form.teamNumber}
+          onChange={set('teamNumber')}
+          placeholder="Ex : 1, 42..."
+        />
       </div>
       <div className="flex gap-3 justify-end pt-2">
         <button type="button" onClick={onCancel} className="px-4 py-2 text-sm text-white/50 hover:text-white transition-colors">
@@ -604,6 +621,17 @@ export default function AdminTeamsPage() {
     } finally { setSaving(false); }
   };
 
+  // ── Assigner numéros ─────────────────────────────────────────────────────
+  const handleAssignNumbers = async () => {
+    try {
+      const res = await api.post('/teams/assign-numbers');
+      await fetchAll();
+      showToast('ok', res.data.message);
+    } catch (err) {
+      showToast('error', err.response?.data?.error || 'Erreur lors de la numérotation');
+    }
+  };
+
   // ── Déplacer groupe ───────────────────────────────────────────────────────
   const handleMoved = (warning) => {
     fetchAll();
@@ -637,6 +665,13 @@ export default function AdminTeamsPage() {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={handleAssignNumbers}
+            className="px-4 py-2 rounded-lg border border-white/15 text-sm text-white/70 hover:text-white hover:border-white/30 transition-colors"
+            title="Attribue des numéros séquentiels aux équipes non numérotées, dans l'ordre d'inscription"
+          >
+            # Numéroter
+          </button>
+          <button
             onClick={() => setModal('csv')}
             className="px-4 py-2 rounded-lg border border-white/15 text-sm text-white/70 hover:text-white hover:border-white/30 transition-colors"
           >
@@ -663,6 +698,7 @@ export default function AdminTeamsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10">
+                  <th className="text-left px-4 py-3 text-xs text-white/40 font-medium uppercase tracking-wide">#</th>
                   <th className="text-left px-4 py-3 text-xs text-white/40 font-medium uppercase tracking-wide">Pays</th>
                   <th className="text-left px-4 py-3 text-xs text-white/40 font-medium uppercase tracking-wide">Équipe</th>
                   <th className="text-left px-4 py-3 text-xs text-white/40 font-medium uppercase tracking-wide">Joueurs</th>
@@ -684,6 +720,9 @@ export default function AdminTeamsPage() {
                         : i % 2 === 0 ? '' : 'bg-white/[0.02]'
                     }`}
                   >
+                    <td className="px-4 py-3 text-xs text-white/30 font-mono tabular-nums">
+                      {team.teamNumber != null ? `#${team.teamNumber}` : '—'}
+                    </td>
                     <td className="px-4 py-3 text-xl">{flag(team.country)}</td>
                     <td className="px-4 py-3">
                       <div className="font-semibold text-white text-sm">

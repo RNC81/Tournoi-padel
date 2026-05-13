@@ -67,8 +67,8 @@ router.get('/', async (req, res) => {
     }
 
     const matches = await Match.find(filter)
-      .populate('team1',  'name player1 player2 country')
-      .populate('team2',  'name player1 player2 country')
+      .populate('team1',  'name player1 player2 country teamNumber')
+      .populate('team2',  'name player1 player2 country teamNumber')
       .populate('winner', 'name')
       .sort({ position: 1, createdAt: 1 });
 

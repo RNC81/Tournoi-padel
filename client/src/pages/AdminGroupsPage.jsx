@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import { formatTeamName } from '../utils/formatTeam';
+import { formatTeamName, formatTeamLabel } from '../utils/formatTeam';
 import ConfirmModal from '../components/admin/ConfirmModal';
 
 // ─── UTILITAIRES ──────────────────────────────────────────────────────────────
@@ -32,8 +32,8 @@ function ScoreModal({ match, setFormat, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
-  const team1Label = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || 'Équipe 1';
-  const team2Label = formatTeamName(match.team2?.player1, match.team2?.player2) || match.team2?.name || 'Équipe 2';
+  const team1Label = match.team1 ? formatTeamLabel(match.team1) : 'Équipe 1';
+  const team2Label = match.team2 ? formatTeamLabel(match.team2) : 'Équipe 2';
 
   // Calcul dynamique pour révéler le set décisif (S3 en BO3, S5 en BO5…)
   const decisiveSets = sets.slice(0, setsToWin).filter(s => s.score1 !== '' && s.score2 !== '');
@@ -237,7 +237,7 @@ function GroupCard({ group, setFormat, onScoreClick, onRefresh }) {
                   <td className={`py-2 font-bold text-sm ${rankColor(s.rank, standings.length)}`}>{s.rank}</td>
                   <td className="py-2 text-white/80 max-w-0 w-full pr-2">
                     <div className="truncate text-xs">
-                      {formatTeamName(s.team?.player1, s.team?.player2) || s.team?.name || '—'}
+                      {formatTeamLabel(s.team)}
                     </div>
                     <div className="text-white/30 text-xs truncate">{s.team?.country || ''}</div>
                   </td>
@@ -276,8 +276,8 @@ function GroupCard({ group, setFormat, onScoreClick, onRefresh }) {
           </div>
           <div className="space-y-2">
             {matches.map((match, idx) => {
-              const t1 = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || '—';
-              const t2 = formatTeamName(match.team2?.player1, match.team2?.player2) || match.team2?.name || '—';
+              const t1 = match.team1 ? formatTeamLabel(match.team1) : '—';
+              const t2 = match.team2 ? formatTeamLabel(match.team2) : '—';
               return (
                 <div
                   key={match._id}

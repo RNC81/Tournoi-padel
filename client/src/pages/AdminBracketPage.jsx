@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
-import { formatTeamName } from '../utils/formatTeam';
+import { formatTeamName, formatTeamLabel } from '../utils/formatTeam';
 
 // ─── CONSTANTES ───────────────────────────────────────────────────────────────
 
@@ -44,8 +44,8 @@ function ScoreModal({ match, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
-  const t1 = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || '?';
-  const t2 = formatTeamName(match.team2?.player1, match.team2?.player2) || match.team2?.name || '?';
+  const t1 = match.team1 ? formatTeamLabel(match.team1) : '?';
+  const t2 = match.team2 ? formatTeamLabel(match.team2) : '?';
 
   // Révéler le set décisif si égalité après setsToWin sets
   const decisiveSets = sets.slice(0, setsToWin).filter(s => s.score1 !== '' && s.score2 !== '');
@@ -166,7 +166,7 @@ function TeamSlot({ team, isBye, isWinner, isLoser }) {
     );
   }
 
-  const label = formatTeamName(team.player1, team.player2) || team.name;
+  const label = formatTeamLabel(team);
 
   return (
     <div className={`px-3 py-1.5 text-xs truncate transition-colors ${

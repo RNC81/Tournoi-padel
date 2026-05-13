@@ -80,12 +80,40 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ─── POST /api/teams/assign-numbers ──────────────────────────────────────────
+// Assigne des numéros séquentiels à toutes les équipes sans numéro,
+// triées par ordre d'inscription (registeredAt).
+// Reprend après le numéro le plus élevé déjà attribué.
+
+router.post('/assign-numbers', async (req, res) => {
+  try {
+    const teams = await Team.find({ teamNumber: null }).sort({ registeredAt: 1 });
+
+    if (teams.length === 0) {
+      return res.json({ message: 'Toutes les équipes ont déjà un numéro', assigned: 0 });
+    }
+
+    // Reprendre après le max actuel (0 si aucun numéro existant)
+    const maxDoc = await Team.findOne({ teamNumber: { $ne: null } }).sort({ teamNumber: -1 });
+    let next = (maxDoc?.teamNumber ?? 0) + 1;
+
+    for (const team of teams) {
+      team.teamNumber = next++;
+      await team.save();
+    }
+
+    res.json({ message: `${teams.length} équipe(s) numérotée(s)`, assigned: teams.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
 // ─── PUT /api/teams/:id ──────────────────────────────────────────────────────
 // Modifier une équipe — mise à jour partielle
 
 router.put('/:id', validateObjectId, async (req, res) => {
   try {
-    const allowed = ['name', 'player1', 'player2', 'country', 'notes', 'tournamentPath'];
+    const allowed = ['name', 'player1', 'player2', 'country', 'notes', 'tournamentPath', 'teamNumber'];
     const updates = {};
 
     for (const key of allowed) {

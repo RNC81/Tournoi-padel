@@ -6,7 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import publicApi from '../utils/publicApi';
 import usePolling from '../hooks/usePolling';
-import { formatTeamName } from '../utils/formatTeam';
+import { formatTeamName, formatTeamLabel } from '../utils/formatTeam';
 
 // ─── Traductions FR/EN ────────────────────────────────────────────────────────
 
@@ -345,7 +345,7 @@ function GroupCard({ group, qualPerGroup, t }) {
       {/* Classement */}
       <div className="px-3 py-2 space-y-1">
         {group.standings?.map((s, i) => {
-          const teamName = formatTeamName(s.team?.player1, s.team?.player2) || s.team?.name || '—';
+          const teamName = formatTeamLabel(s.team);
           // Les `qualPerGroup` premières équipes sont surlignées comme qualifiées
           const isQual   = i < qualPerGroup;
 
@@ -428,8 +428,8 @@ function GroupCard({ group, qualPerGroup, t }) {
 // ─── MatchRow ─────────────────────────────────────────────────────────────────
 
 function MatchRow({ match }) {
-  const t1Name = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || '—';
-  const t2Name = formatTeamName(match.team2?.player1, match.team2?.player2) || match.team2?.name || '—';
+  const t1Name = formatTeamLabel(match.team1);
+  const t2Name = formatTeamLabel(match.team2);
 
   const t1Wins = match.sets?.filter(s => s.score1 > s.score2).length || 0;
   const t2Wins = match.sets?.filter(s => s.score2 > s.score1).length || 0;
@@ -586,7 +586,7 @@ function TeamSlot({ match, side, isWinner, isLoser }) {
   if (isBye)   return <div className="px-3 py-1.5 text-xs text-forest/20 italic">BYE</div>;
   if (!team)   return <div className="px-3 py-1.5 text-xs text-forest/20">—</div>;
 
-  const label = formatTeamName(team.player1, team.player2) || team.name;
+  const label = formatTeamLabel(team);
 
   return (
     <div className={`px-3 py-1.5 text-xs truncate ${
