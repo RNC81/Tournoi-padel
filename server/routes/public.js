@@ -336,4 +336,91 @@ router.get('/bracket/consolante', async (req, res) => {
   }
 });
 
+// ─── GET /api/public/all ─────────────────────────────────────────────────────
+// Endpoint agrégé — remplace les 5 appels séparés du frontend.
+// Toutes les requêtes MongoDB sont faites en parallèle.
+// allSettled : un échec partiel (ex: bracket pas encore généré) ne bloque pas le reste.
+
+router.get('/all', async (req, res) => {
+  try {
+    const tournament = await Tournament.findOne().lean();
+    const tid        = tournament?._id;
+
+    const MAIN_PHASES = ['r32', 'r16', 'qf', 'sf', 'final'];
+    const CON_PHASES  = [
+      'consolante_r32', 'consolante_r16',
+      'consolante_qf',  'consolante_sf',  'consolante_final',
+    ];
+
+    const tiebreaker = tournament?.qualificationRules?.tiebreaker ||
+      ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'];
+
+    // Toutes les requêtes en parallèle
+    const [teamCountRes, groupsRes, matchesMainRes, matchesConRes] = await Promise.allSettled([
+      Team.countDocuments(),
+      tid ? Group.find({ tournament: tid, phase: 'pool' })
+              .populate('teams', 'name player1 player2 country tournamentPath teamNumber')
+              .select('-__v').sort({ name: 1 }).lean()
+          : Promise.resolve([]),
+      tid ? Match.find({ tournament: tid, phase: { $in: MAIN_PHASES } })
+              .populate('team1',  'name player1 player2 country teamNumber')
+              .populate('team2',  'name player1 player2 country teamNumber')
+              .populate('winner', 'name')
+              .select('-__v -setFormat').sort({ position: 1 }).lean()
+          : Promise.resolve([]),
+      tid ? Match.find({ tournament: tid, phase: { $in: CON_PHASES } })
+              .populate('team1',  'name player1 player2 country teamNumber')
+              .populate('team2',  'name player1 player2 country teamNumber')
+              .populate('winner', 'name')
+              .select('-__v -setFormat').sort({ position: 1 }).lean()
+          : Promise.resolve([]),
+    ]);
+
+    const teamCount   = teamCountRes.status   === 'fulfilled' ? teamCountRes.value   : 0;
+    const rawGroups   = groupsRes.status      === 'fulfilled' ? groupsRes.value      : [];
+    const matchesMain = matchesMainRes.status === 'fulfilled' ? matchesMainRes.value : [];
+    const matchesCon  = matchesConRes.status  === 'fulfilled' ? matchesConRes.value  : [];
+
+    // Enrichir les groupes avec standings (en parallèle aussi)
+    const groups = await Promise.all(rawGroups.map(async group => {
+      const standings = await enrichGroupWithStandings(group, tiebreaker);
+      return { _id: group._id, name: group.name, phase: group.phase, teams: group.teams, standings };
+    }));
+
+    // Regrouper les matchs par phase
+    const bracket = {};
+    for (const phase of MAIN_PHASES) {
+      const list = matchesMain.filter(m => m.phase === phase);
+      if (list.length > 0) bracket[phase] = list;
+    }
+    const consolanteBracket = {};
+    for (const phase of CON_PHASES) {
+      const list = matchesCon.filter(m => m.phase === phase);
+      if (list.length > 0) consolanteBracket[phase] = list;
+    }
+
+    res.json({
+      config: tournament ? {
+        name:     tournament.name,
+        status:   tournament.status,
+        date:     tournament.date     || null,
+        location: tournament.location || null,
+      } : { name: null, status: null },
+      tournament: tournament ? {
+        name:               tournament.name,
+        status:             tournament.status,
+        maxTeams:           tournament.maxTeams,
+        currentPhase:       tournament.currentPhase,
+        teamCount,
+        qualificationRules: tournament.qualificationRules,
+      } : null,
+      groups,
+      bracket,
+      consolanteBracket,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;

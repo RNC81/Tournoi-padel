@@ -57,31 +57,29 @@ export default function GuestHomePage() {
   // Charge les 5 endpoints en parallèle — allSettled pour ne pas tout bloquer
   // si un seul échoue (ex: bracket pas encore généré)
   const fetchAll = useCallback(async () => {
-    const [cfgRes, trnRes, grpRes, bktRes, conRes, schRes] = await Promise.allSettled([
-      publicApi.get('/config'),
-      publicApi.get('/tournament'),
-      publicApi.get('/groups', { params: { phase: 'pool' } }),
-      publicApi.get('/bracket'),
-      publicApi.get('/bracket/consolante'),
+    const [allRes, schRes] = await Promise.allSettled([
+      publicApi.get('/all'),
       publicApi.get('/document/schedule', { params: { info: '1' } }),
     ]);
 
-    if (cfgRes.status === 'fulfilled') setConfig(cfgRes.value.data);
-    if (trnRes.status === 'fulfilled') setTournament(trnRes.value.data);
-    if (grpRes.status === 'fulfilled') setGroups(grpRes.value.data || []);
-    if (bktRes.status === 'fulfilled') setBracket(bktRes.value.data || {});
-    if (conRes.status === 'fulfilled') setConsolante(conRes.value.data || {});
+    if (allRes.status === 'fulfilled') {
+      const d = allRes.value.data;
+      if (d.config)      setConfig(d.config);
+      if (d.tournament)  setTournament(d.tournament);
+      setGroups(d.groups            || []);
+      setBracket(d.bracket          || {});
+      setConsolante(d.consolanteBracket || {});
+    }
+
     setScheduleInfo(schRes.status === 'fulfilled' && schRes.value.data?.exists ? schRes.value.data : null);
 
-    // Erreur totale si les endpoints principaux échouent tous
-    const allFailed = [cfgRes, trnRes, grpRes, bktRes, conRes].every(r => r.status === 'rejected');
-    setApiError(allFailed);
+    setApiError(allRes.status === 'rejected');
     setLastUpdate(new Date());
     setLoading(false);
   }, []);
 
-  // Polling toutes les 15s — le tournoi c'est du live
-  usePolling(fetchAll, 15000, true);
+  // Polling toutes les 30s — 1 requête agrégée au lieu de 6
+  usePolling(fetchAll, 30000, true);
 
   // Rafraîchissement immédiat quand le spectateur revient sur l'onglet
   useEffect(() => {
