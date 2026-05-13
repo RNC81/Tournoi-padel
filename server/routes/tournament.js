@@ -1,5 +1,8 @@
 const crypto     = require('crypto');
 const express    = require('express');
+const path       = require('path');
+const fs         = require('fs');
+const multer     = require('multer');
 const Tournament = require('../models/Tournament');
 const Group      = require('../models/Group');
 const Match      = require('../models/Match');
@@ -8,6 +11,36 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const safeError  = require('../utils/safeError');
 
 const router = express.Router();
+
+// ─── Configuration upload documents ──────────────────────────────────────────
+
+const UPLOADS_DIR   = path.join(__dirname, '../uploads');
+const ALLOWED_TYPES = ['rules', 'schedule'];
+const ALLOWED_MIMES = [
+  'application/pdf',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+// Sauvegarde le fichier sous la forme [type].[ext] (ex: rules.pdf, schedule.xlsx)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename:    (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.bin';
+    cb(null, `${req.params.type}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits:     { fileSize: 10 * 1024 * 1024 }, // 10 Mo max
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIMES.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Type de fichier non autorisé (PDF ou Excel uniquement)'));
+  },
+});
 
 // Toutes les routes tournoi sont réservées aux admins
 router.use(requireAuth, requireAdmin);
@@ -302,6 +335,64 @@ router.post('/reset/all', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
   }
+});
+
+// ─── POST /api/tournament/document/:type ──────────────────────────────────────
+// Upload un document (règlement PDF ou horaires Excel).
+// Remplace le fichier existant du même type.
+
+router.post('/document/:type',
+  (req, res, next) => {
+    if (!ALLOWED_TYPES.includes(req.params.type)) {
+      return res.status(400).json({ error: 'Type invalide. Valeurs : rules, schedule' });
+    }
+    // Supprimer l'ancien fichier avant l'upload
+    const existing = fs.readdirSync(UPLOADS_DIR).find(f => f.startsWith(`${req.params.type}.`));
+    if (existing) {
+      try { fs.unlinkSync(path.join(UPLOADS_DIR, existing)); } catch (_) {}
+    }
+    next();
+  },
+  (req, res, next) => {
+    upload.single('file')(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message || "Erreur lors de l'upload" });
+      next();
+    });
+  },
+  (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
+    res.json({ filename: req.file.filename, size: req.file.size, uploadedAt: new Date().toISOString() });
+  }
+);
+
+// ─── DELETE /api/tournament/document/:type ────────────────────────────────────
+// Supprimer un document uploadé.
+
+router.delete('/document/:type', (req, res) => {
+  if (!ALLOWED_TYPES.includes(req.params.type)) {
+    return res.status(400).json({ error: 'Type invalide' });
+  }
+  const file = fs.readdirSync(UPLOADS_DIR).find(f => f.startsWith(`${req.params.type}.`));
+  if (!file) return res.status(404).json({ error: 'Document introuvable' });
+  try {
+    fs.unlinkSync(path.join(UPLOADS_DIR, file));
+    res.json({ message: 'Document supprimé' });
+  } catch {
+    res.status(500).json({ error: 'Erreur lors de la suppression' });
+  }
+});
+
+// ─── GET /api/tournament/document/:type ──────────────────────────────────────
+// Infos sur le document (admin) — { exists, filename, size, updatedAt }.
+
+router.get('/document/:type', (req, res) => {
+  if (!ALLOWED_TYPES.includes(req.params.type)) {
+    return res.status(400).json({ error: 'Type invalide' });
+  }
+  const file = fs.readdirSync(UPLOADS_DIR).find(f => f.startsWith(`${req.params.type}.`));
+  if (!file) return res.json({ exists: false });
+  const stat = fs.statSync(path.join(UPLOADS_DIR, file));
+  res.json({ exists: true, filename: file, size: stat.size, updatedAt: stat.mtime.toISOString() });
 });
 
 module.exports = router;

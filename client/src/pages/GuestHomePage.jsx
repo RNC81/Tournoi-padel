@@ -7,51 +7,7 @@ import { useState, useCallback, useEffect } from 'react';
 import publicApi from '../utils/publicApi';
 import usePolling from '../hooks/usePolling';
 import { formatTeamName, formatTeamLabel } from '../utils/formatTeam';
-
-// ─── Traductions FR/EN ────────────────────────────────────────────────────────
-
-const T = {
-  fr: {
-    tabs:        { groupes: 'Poules', bracket: 'Bracket', consolante: 'Consolante' },
-    updatedAt:   (t) => `Mis à jour à ${t}`,
-    loading:     'Chargement du tournoi…',
-    errorMain:   'Impossible de contacter le serveur.',
-    errorSub:    'La page se rafraîchit automatiquement toutes les 15 secondes.',
-    notStarted:  "Le tournoi n'a pas encore commencé",
-    notAvail:    (l) => `Les ${l} ne sont pas encore disponibles`,
-    autoRefresh: 'Cette page se rafraîchit automatiquement',
-    groups:      (n, q) => `${n} groupe${n > 1 ? 's' : ''} · ${q} qualifié${q > 1 ? 's' : ''} par groupe`,
-    qualified:   'Qualifié',
-    groupLabel:  (n) => `Groupe ${n}`,
-    teams:       (n) => `${n} équipe${n > 1 ? 's' : ''}`,
-    matches:     (p, t) => `${p}/${t} matchs joués`,
-    showMatches: 'Voir les matchs',
-    hideMatches: 'Masquer les matchs',
-    loadingM:    'Chargement…',
-    noMatches:   'Aucun match enregistré',
-    noBracket:   'Le bracket n\'est pas encore disponible.',
-  },
-  en: {
-    tabs:        { groupes: 'Groups', bracket: 'Bracket', consolante: 'Consolation' },
-    updatedAt:   (t) => `Updated at ${t}`,
-    loading:     'Loading tournament…',
-    errorMain:   'Cannot reach the server.',
-    errorSub:    'The page refreshes automatically every 15 seconds.',
-    notStarted:  'The tournament hasn\'t started yet',
-    notAvail:    (l) => `${l} not yet available`,
-    autoRefresh: 'This page refreshes automatically',
-    groups:      (n, q) => `${n} group${n > 1 ? 's' : ''} · ${q} qualifier${q > 1 ? 's' : ''} per group`,
-    qualified:   'Qualified',
-    groupLabel:  (n) => `Group ${n}`,
-    teams:       (n) => `${n} team${n > 1 ? 's' : ''}`,
-    matches:     (p, t) => `${p}/${t} matches played`,
-    showMatches: 'Show matches',
-    hideMatches: 'Hide matches',
-    loadingM:    'Loading…',
-    noMatches:   'No matches recorded',
-    noBracket:   'Bracket not yet available.',
-  },
-};
+import { i18n, LANG_KEY } from '../utils/i18n';
 
 // ─── Constantes bracket ───────────────────────────────────────────────────────
 
@@ -75,34 +31,39 @@ const CONSOLANTE_PHASES = ['consolante_r32', 'consolante_r16', 'consolante_qf', 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
 export default function GuestHomePage() {
-  const [activeTab,   setActiveTab]   = useState('groupes');
-  const [config,      setConfig]      = useState(null);
-  const [tournament,  setTournament]  = useState(null); // pour qualificationRules
-  const [groups,      setGroups]      = useState([]);
-  const [bracket,     setBracket]     = useState({});
-  const [consolante,  setConsolante]  = useState({});
-  const [lastUpdate,  setLastUpdate]  = useState(null);
-  const [loading,     setLoading]     = useState(true);
-  const [apiError,    setApiError]    = useState(false);
-  const [lang,        setLang]        = useState(() => localStorage.getItem('padel_lang') || 'fr');
+  const [activeTab,      setActiveTab]      = useState('groupes');
+  const [config,         setConfig]         = useState(null);
+  const [tournament,     setTournament]     = useState(null); // pour qualificationRules
+  const [groups,         setGroups]         = useState([]);
+  const [bracket,        setBracket]        = useState({});
+  const [consolante,     setConsolante]     = useState({});
+  const [scheduleAvail,  setScheduleAvail]  = useState(false);
+  const [lastUpdate,     setLastUpdate]     = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [apiError,       setApiError]       = useState(false);
+  const [lang,           setLang]           = useState(() => localStorage.getItem(LANG_KEY) || 'fr');
 
-  const t = T[lang];
+  const t = i18n[lang].guest;
 
-  const toggleLang = () => setLang(l => {
-    const next = l === 'fr' ? 'en' : 'fr';
-    localStorage.setItem('padel_lang', next);
-    return next;
-  });
+  const toggleLang = () => {
+    setLang(l => {
+      const next = l === 'fr' ? 'en' : 'fr';
+      localStorage.setItem(LANG_KEY, next);
+      window.dispatchEvent(new CustomEvent('padel-lang-change', { detail: next }));
+      return next;
+    });
+  };
 
   // Charge les 5 endpoints en parallèle — allSettled pour ne pas tout bloquer
   // si un seul échoue (ex: bracket pas encore généré)
   const fetchAll = useCallback(async () => {
-    const [cfgRes, trnRes, grpRes, bktRes, conRes] = await Promise.allSettled([
+    const [cfgRes, trnRes, grpRes, bktRes, conRes, schRes] = await Promise.allSettled([
       publicApi.get('/config'),
       publicApi.get('/tournament'),
       publicApi.get('/groups', { params: { phase: 'pool' } }),
       publicApi.get('/bracket'),
       publicApi.get('/bracket/consolante'),
+      publicApi.get('/document/schedule', { params: { info: '1' } }),
     ]);
 
     if (cfgRes.status === 'fulfilled') setConfig(cfgRes.value.data);
@@ -110,8 +71,9 @@ export default function GuestHomePage() {
     if (grpRes.status === 'fulfilled') setGroups(grpRes.value.data || []);
     if (bktRes.status === 'fulfilled') setBracket(bktRes.value.data || {});
     if (conRes.status === 'fulfilled') setConsolante(conRes.value.data || {});
+    setScheduleAvail(schRes.status === 'fulfilled' && schRes.value.data?.exists === true);
 
-    // Erreur totale si /config et /tournament échouent tous les deux
+    // Erreur totale si les endpoints principaux échouent tous
     const allFailed = [cfgRes, trnRes, grpRes, bktRes, conRes].every(r => r.status === 'rejected');
     setApiError(allFailed);
     setLastUpdate(new Date());
@@ -139,9 +101,10 @@ export default function GuestHomePage() {
   const qualPerGroup  = hasGroups ? Math.max(1, Math.floor(bracketTarget / groups.length)) : 2;
 
   const tabs = [
-    { id: 'groupes',    label: t.tabs.groupes,    active: hasGroups    },
-    { id: 'bracket',    label: t.tabs.bracket,    active: hasBracket   },
+    { id: 'groupes',    label: t.tabs.groupes,    active: hasGroups     },
+    { id: 'bracket',    label: t.tabs.bracket,    active: hasBracket    },
     { id: 'consolante', label: t.tabs.consolante, active: hasConsolante },
+    { id: 'horaires',   label: t.tabs.horaires,   active: scheduleAvail },
   ];
 
   return (
@@ -209,10 +172,12 @@ export default function GuestHomePage() {
           hasBracket
             ? <BracketTab data={bracket} phases={MAIN_PHASES} isFinalPhase="final" t={t} />
             : <NotStartedState label={lang === 'fr' ? 'bracket principal' : 'main bracket'} config={config} hasStarted={hasStarted} t={t} />
-        ) : (
+        ) : activeTab === 'consolante' ? (
           hasConsolante
             ? <BracketTab data={consolante} phases={CONSOLANTE_PHASES} isFinalPhase="consolante_final" accent="violet" t={t} />
             : <NotStartedState label={lang === 'fr' ? 'bracket consolante' : 'consolation bracket'} config={config} hasStarted={hasStarted} t={t} />
+        ) : (
+          <ScheduleTab available={scheduleAvail} t={t} />
         )}
       </div>
     </div>
@@ -371,9 +336,16 @@ function GroupCard({ group, qualPerGroup, t }) {
                 />
               )}
 
-              {/* Nom de l'équipe */}
-              <span className={`flex-1 font-medium text-xs truncate ${isQual ? 'text-forest' : 'text-forest/60'}`}>
-                {teamName}
+              {/* Nom de l'équipe + badge pays */}
+              <span className="flex-1 flex items-center gap-1.5 min-w-0">
+                <span className={`font-medium text-xs truncate ${isQual ? 'text-forest' : 'text-forest/60'}`}>
+                  {teamName}
+                </span>
+                {s.team?.country?.trim() && (
+                  <span className="shrink-0 text-[9px] font-bold text-forest/30 bg-forest/8 border border-forest/10 rounded px-1 leading-4 uppercase tracking-wide">
+                    {s.team.country.trim().toUpperCase().slice(0, 3)}
+                  </span>
+                )}
               </span>
 
               {/* Stats */}
@@ -462,6 +434,54 @@ function MatchRow({ match }) {
       <span className={`truncate text-right font-medium ${t2Wins > t1Wins ? 'text-forest font-semibold' : 'text-forest/35'}`}>
         {t2Name}
       </span>
+    </div>
+  );
+}
+
+// ─── Onglet Horaires ──────────────────────────────────────────────────────────
+
+function ScheduleTab({ available, t }) {
+  const scheduleUrl = `${import.meta.env.VITE_API_URL || ''}/api/public/document/schedule`;
+
+  if (!available) {
+    return (
+      <div className="flex flex-col items-center justify-center py-28 text-center">
+        <div className="w-14 h-14 rounded-full mb-5 flex items-center justify-center" style={{ background: '#c8e832' }}>
+          <svg className="w-8 h-8 text-forest" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+        </div>
+        <h2 className="font-display font-black text-2xl text-forest mb-3">
+          {t.scheduleNotReady}
+        </h2>
+        <div className="flex items-center gap-2 text-xs text-forest/30 mt-4">
+          <span className="w-1.5 h-1.5 rounded-full bg-lime animate-pulse" />
+          {t.autoRefresh}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center gap-6">
+      <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: '#c8e832' }}>
+        <svg className="w-8 h-8 text-forest" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        </svg>
+      </div>
+      <a
+        href={scheduleUrl}
+        download
+        className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-7 py-3.5 rounded-xl text-base transition-all active:scale-95"
+      >
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3"/>
+        </svg>
+        {t.scheduleDl}
+      </a>
     </div>
   );
 }

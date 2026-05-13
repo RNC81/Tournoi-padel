@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../utils/AuthContext';
+import { i18n, LANG_KEY } from '../utils/i18n';
 
 // Navbar sticky sur fond beige — présente sur toutes les pages publiques.
 // Thème : sports editorial clair (forest / beige / lime).
@@ -9,6 +10,19 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const [lang, setLang] = useState(() => localStorage.getItem(LANG_KEY) || 'fr');
+
+  const nav = i18n[lang].nav;
+
+  // Bascule la langue, synchro avec toutes les pages via événement custom
+  const toggleLang = () => {
+    setLang(l => {
+      const next = l === 'fr' ? 'en' : 'fr';
+      localStorage.setItem(LANG_KEY, next);
+      window.dispatchEvent(new CustomEvent('padel-lang-change', { detail: next }));
+      return next;
+    });
+  };
 
   // Ferme le dropdown si clic en dehors
   useEffect(() => {
@@ -56,17 +70,28 @@ export default function Navbar() {
         {/* Liens de navigation — masqués sur mobile */}
         <nav className="hidden md:flex items-center gap-6">
           <a href="/#programme" className="text-sm font-medium text-forest/70 hover:text-forest transition-colors">
-            Programme
+            {nav.programme}
           </a>
           <a href="/#reglement" className="text-sm font-medium text-forest/70 hover:text-forest transition-colors">
-            Règlement
+            {nav.reglement}
           </a>
           <Link to="/tournoi" className="text-sm font-medium text-forest/70 hover:text-forest transition-colors">
-            Scores live
+            {nav.scores}
           </Link>
         </nav>
 
-        {/* Bouton Connexion / Menu utilisateur */}
+        {/* Bouton langue + Connexion / Menu utilisateur */}
+        <div className="flex items-center gap-2">
+
+          {/* Toggle FR / EN */}
+          <button
+            onClick={toggleLang}
+            className="px-2.5 py-1.5 rounded-lg border border-forest/20 text-xs font-bold text-forest/50 hover:text-forest hover:border-forest/40 transition-colors"
+            title={lang === 'fr' ? 'Switch to English' : 'Passer en français'}
+          >
+            {nav.langToggle}
+          </button>
+
         <div className="relative" ref={menuRef}>
           {user ? (
             /* Admin connecté */
@@ -173,6 +198,7 @@ export default function Navbar() {
             </div>
           )}
         </div>
+        </div>{/* fin flex langue+connexion */}
       </div>
     </header>
   );

@@ -1,11 +1,15 @@
 const express    = require('express');
 const rateLimit  = require('express-rate-limit');
+const path       = require('path');
+const fs         = require('fs');
 const mongoose   = require('mongoose');
 const Tournament = require('../models/Tournament');
 const Team       = require('../models/Team');
 const Group      = require('../models/Group');
 const Match      = require('../models/Match');
 const { computeStandings } = require('../utils/standings');
+
+const UPLOADS_DIR = path.join(__dirname, '../uploads');
 
 const router = express.Router();
 
@@ -62,6 +66,34 @@ router.get('/config', async (req, res) => {
   } catch {
     res.status(500).json({ error: 'Erreur serveur' });
   }
+});
+
+// ─── GET /api/public/document/:type ──────────────────────────────────────────
+// Sert un document uploadé (règlement PDF ou horaires Excel) sans clé API.
+// ?info=1 → retourne les métadonnées JSON au lieu du fichier.
+
+router.get('/document/:type', (req, res) => {
+  const ALLOWED = ['rules', 'schedule'];
+  const { type } = req.params;
+  if (!ALLOWED.includes(type)) {
+    return res.status(400).json({ error: 'Type invalide' });
+  }
+  let file;
+  try {
+    const files = fs.existsSync(UPLOADS_DIR) ? fs.readdirSync(UPLOADS_DIR) : [];
+    file = files.find(f => f.startsWith(`${type}.`));
+  } catch {
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+  if (!file) {
+    if (req.query.info) return res.json({ exists: false });
+    return res.status(404).json({ error: 'Document non disponible' });
+  }
+  if (req.query.info) {
+    const stat = fs.statSync(path.join(UPLOADS_DIR, file));
+    return res.json({ exists: true, filename: file, size: stat.size, updatedAt: stat.mtime.toISOString() });
+  }
+  res.download(path.join(UPLOADS_DIR, file), file);
 });
 
 router.use(apiKeyAuth);

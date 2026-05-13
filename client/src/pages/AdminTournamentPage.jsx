@@ -169,6 +169,9 @@ export default function AdminTournamentPage() {
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [copied, setCopied]         = useState(false);
 
+  // Section 6 — Documents
+  const [docs, setDocs] = useState({ rules: null, schedule: null });
+
   // Toast global
   const [toast, setToast]           = useState(null);
 
@@ -207,10 +210,22 @@ export default function AdminTournamentPage() {
     }
   }, []);
 
+  const loadDocs = useCallback(async () => {
+    const [rulesRes, schedRes] = await Promise.allSettled([
+      api.get('/tournament/document/rules'),
+      api.get('/tournament/document/schedule'),
+    ]);
+    setDocs({
+      rules:    rulesRes.status    === 'fulfilled' ? rulesRes.value.data    : null,
+      schedule: schedRes.status === 'fulfilled' ? schedRes.value.data : null,
+    });
+  }, []);
+
   useEffect(() => {
     loadTournament();
     loadApiKey();
-  }, [loadTournament, loadApiKey]);
+    loadDocs();
+  }, [loadTournament, loadApiKey, loadDocs]);
 
   // ── Toast helper ──────────────────────────────────────────────────────────
 
@@ -365,6 +380,32 @@ export default function AdminTournamentPage() {
       showToast('error', err.response?.data?.error || 'Erreur lors de la régénération');
     } finally {
       setModalLoading(false);
+    }
+  };
+
+  // ── Section 6 — Upload / Suppression documents ───────────────────────────
+
+  const uploadDoc = async (type, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      await api.post(`/tournament/document/${type}`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      showToast('ok', 'Document enregistré');
+      loadDocs();
+    } catch (err) {
+      showToast('error', err.response?.data?.error || "Erreur lors de l'upload");
+    }
+  };
+
+  const deleteDoc = async (type) => {
+    try {
+      await api.delete(`/tournament/document/${type}`);
+      showToast('ok', 'Document supprimé');
+      loadDocs();
+    } catch {
+      showToast('error', 'Erreur lors de la suppression');
     }
   };
 
@@ -645,6 +686,60 @@ export default function AdminTournamentPage() {
         >
           Régénérer la clé
         </button>
+      </section>
+
+      {/* ── Section 6 : Documents ───────────────────────────────────────── */}
+      <section className="bg-dark-800 border border-white/10 rounded-2xl p-6">
+        <h2 className="font-display font-semibold text-lg text-white mb-1">Documents</h2>
+        <p className="text-white/40 text-sm mb-5">
+          PDF règlement et fichier horaires visibles par les joueurs sur la vue publique.
+        </p>
+
+        <div className="space-y-3">
+          {[
+            { type: 'rules',    label: 'Règlement officiel', accept: '.pdf' },
+            { type: 'schedule', label: 'Horaires',           accept: '.pdf,.xls,.xlsx' },
+          ].map(({ type, label, accept }) => {
+            const doc = docs[type];
+            return (
+              <div key={type} className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-white/5 last:border-0">
+                <div>
+                  <p className="text-white/70 text-sm font-medium">{label}</p>
+                  {doc?.exists ? (
+                    <p className="text-white/30 text-xs mt-0.5">
+                      {doc.filename} · {(doc.size / 1024).toFixed(0)} Ko ·{' '}
+                      {new Date(doc.updatedAt).toLocaleDateString('fr-FR')}
+                    </p>
+                  ) : (
+                    <p className="text-white/20 text-xs mt-0.5 italic">Aucun fichier</p>
+                  )}
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white text-xs transition-colors">
+                    {doc?.exists ? 'Remplacer' : 'Choisir fichier'}
+                    <input
+                      type="file"
+                      accept={accept}
+                      className="hidden"
+                      onChange={e => {
+                        if (e.target.files?.[0]) uploadDoc(type, e.target.files[0]);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {doc?.exists && (
+                    <button
+                      onClick={() => deleteDoc(type)}
+                      className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs transition-colors"
+                    >
+                      Supprimer
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
     </div>

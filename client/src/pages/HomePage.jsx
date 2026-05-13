@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, useScroll, useTransform } from 'motion/react';
 import publicApi from '../utils/publicApi';
 import api from '../utils/api';
+import { i18n, LANG_KEY } from '../utils/i18n';
 
 // ─── TRAJECTOIRE BÉZIER ───────────────────────────────────────────────────────
 // 4 segments cubiques — px = left%, py = top_vh
@@ -595,14 +596,28 @@ function ScrollHint() {
 
 // ─── PAGE D'ACCUEIL ───────────────────────────────────────────────────────────
 export default function HomePage() {
-  const [tournament, setTournament] = useState(null);
-  const [qrCode,     setQrCode]     = useState(null);
-  const [openRule,   setOpenRule]   = useState(null);
+  const [tournament,  setTournament]  = useState(null);
+  const [qrCode,      setQrCode]      = useState(null);
+  const [rulesAvail,  setRulesAvail]  = useState(false);
+  const [lang,        setLang]        = useState(() => localStorage.getItem(LANG_KEY) || 'fr');
+
+  // Écoute les changements de langue déclenchés par la Navbar
+  useEffect(() => {
+    const handler = (e) => setLang(e.detail);
+    window.addEventListener('padel-lang-change', handler);
+    return () => window.removeEventListener('padel-lang-change', handler);
+  }, []);
 
   useEffect(() => {
     publicApi.get('/tournament').then(r => setTournament(r.data)).catch(() => {});
     api.get('/qrcode').then(r => setQrCode(r.data.qr)).catch(() => {});
+    // Vérifier si le PDF règlement est disponible
+    publicApi.get('/document/rules', { params: { info: '1' } })
+      .then(r => setRulesAvail(r.data?.exists === true))
+      .catch(() => setRulesAvail(false));
   }, []);
+
+  const t = i18n[lang].home;
 
   const status      = tournament?.status   ?? null;
   const teamCount   = tournament?.teamCount ?? null;
@@ -664,9 +679,9 @@ export default function HomePage() {
             {teamCount != null && (
               <div className="space-y-1.5 max-w-xs">
                 <div className="flex justify-between text-sm">
-                  <span className="text-forest/55">Équipes inscrites</span>
+                  <span className="text-forest/55">{t.equipesInscrites}</span>
                   <span className="text-forest font-bold">
-                    {teamCount} <span className="text-forest/30 font-normal">/ {maxTeams}</span>
+                    {teamCount} <span className="text-forest/30 font-normal">{t.sur} {maxTeams}</span>
                   </span>
                 </div>
                 <div className="h-1.5 bg-forest/12 rounded-full overflow-hidden">
@@ -675,7 +690,7 @@ export default function HomePage() {
                     style={{ width: `${progression}%`, background: 'linear-gradient(90deg, #2d6a2d, #c8e832)' }}
                   />
                 </div>
-                <p className="text-forest/35 text-xs">{maxTeams - teamCount} places restantes</p>
+                <p className="text-forest/35 text-xs">{t.placesRestantes(maxTeams - teamCount)}</p>
               </div>
             )}
 
@@ -686,7 +701,7 @@ export default function HomePage() {
                   to="/inscription"
                   className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-7 py-3.5 rounded-xl text-base transition-all active:scale-95"
                 >
-                  S'inscrire maintenant
+                  {t.sInscrire}
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3"/>
                   </svg>
@@ -696,7 +711,7 @@ export default function HomePage() {
                 to="/tournoi"
                 className="inline-flex items-center gap-2 border-2 border-forest text-forest hover:bg-forest hover:text-white font-bold px-7 py-3.5 rounded-xl text-base transition-all active:scale-95"
               >
-                Suivre le tournoi
+                {t.suivreTournoi}
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -717,12 +732,12 @@ export default function HomePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-white/15">
             <StatItem
               value={teamCount != null ? String(teamCount) : '—'}
-              label="Équipes inscrites"
-              sub={`sur ${maxTeams} max`}
+              label={t.equipesInscrites}
+              sub={`${t.sur} ${maxTeams} max`}
             />
-            <StatItem value="2v2"  label="Format"  sub="doublettes"       />
-            <StatItem value="2"    label="Jours"   sub="14 & 16 Mai"      />
-            <StatItem value="1/16" label="Finale"  sub="bracket principal" />
+            <StatItem value="2v2"  label={t.statFormat}  sub={t.statDoublettes}    />
+            <StatItem value="2"    label={t.statJours}   sub="14 & 16 Mai"         />
+            <StatItem value="1/16" label={t.statFinale}  sub={t.statBracket}       />
           </div>
         </div>
       </section>
@@ -731,8 +746,8 @@ export default function HomePage() {
       {/* Zone : fond de court + zone de service haute (au-dessus du filet) */}
       <section id="programme" className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-20">
         <div className="mb-12">
-          <p className="text-forest/50 text-sm font-bold uppercase tracking-widest mb-2">Calendrier</p>
-          <h2 className="font-display font-black text-4xl md:text-5xl text-forest">Déroulement</h2>
+          <p className="text-forest/50 text-sm font-bold uppercase tracking-widest mb-2">{t.calendrier}</p>
+          <h2 className="font-display font-black text-4xl md:text-5xl text-forest">{t.deroulement}</h2>
         </div>
 
         <div className="relative max-w-2xl">
@@ -741,37 +756,21 @@ export default function HomePage() {
             style={{ background: 'linear-gradient(to bottom, #c8e832, #2d6a2d30)' }}
           />
           <div className="space-y-0">
-            {[
-              {
-                num:   '01', titre: 'Inscriptions',
-                desc:  `Les équipes de 2 joueurs s'inscrivent en ligne. Maximum ${maxTeams} équipes. Première arrivée, première servie.`,
-                status: !status || status === 'registration' ? 'current' : 'done',
-                date:  'Avant le 13 Mai',
-              },
-              {
-                num:   '02', titre: 'Phase de poules',
-                desc:  'Tirage au sort. Chaque équipe joue contre toutes les autres de son groupe (round-robin). Les meilleurs se qualifient.',
-                status: status === 'group_stage' ? 'current'
-                      : (status === 'knockout' || status === 'finished') ? 'done'
-                      : 'upcoming',
-                date:  '14 Mai 2026',
-              },
-              {
-                num:   '03', titre: 'Bracket principal',
-                desc:  'Élimination directe pour les équipes qualifiées. Best of 3 sets. Chaque match est décisif.',
-                status: status === 'knockout' ? 'current'
-                      : status === 'finished'  ? 'done' : 'upcoming',
-                date:  '16 Mai 2026',
-              },
-              {
-                num:   '04', titre: 'Bracket consolante',
-                desc:  'Les équipes éliminées en poule disputent un deuxième tournoi parallèle. Aucune équipe sans match le 16 Mai.',
-                status: status === 'knockout' ? 'current'
-                      : status === 'finished'  ? 'done' : 'upcoming',
-                date:  '16 Mai 2026',
-              },
-            ].map((item, i) => (
-              <TimelineItem key={i} {...item} />
+            {t.timeline.map((item, i) => (
+              <TimelineItem
+                key={i}
+                num={String(i + 1).padStart(2, '0')}
+                titre={item.titre}
+                desc={item.desc(maxTeams)}
+                date={item.date}
+                status={
+                  i === 0 ? (!status || status === 'registration' ? 'current' : 'done')
+                  : i === 1 ? (status === 'group_stage' ? 'current' : (status === 'knockout' || status === 'finished') ? 'done' : 'upcoming')
+                  : (status === 'knockout' ? 'current' : status === 'finished' ? 'done' : 'upcoming')
+                }
+                doneLabel={t.statusDone}
+                currentLabel={t.statusCurrent}
+              />
             ))}
           </div>
         </div>
@@ -794,47 +793,28 @@ export default function HomePage() {
       {/* Zone : zone de service basse (sous le filet) */}
       <section id="reglement" className="relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20">
-          <div className="grid lg:grid-cols-2 gap-16 items-start">
-
-            <div className="lg:sticky lg:top-24">
-              <p className="text-forest/50 text-sm font-bold uppercase tracking-widest mb-2">À savoir</p>
-              <h2 className="font-display font-black text-4xl md:text-5xl text-forest mb-6">Règlement</h2>
-              <p className="text-forest/55 leading-relaxed text-sm">
-                Le tournoi suit les règles officielles du padel World Padel Tour.
-                Les scores sont saisis par set — on enregistre le score final de chaque set,
-                pas chaque point individuel.
-              </p>
-              <div className="mt-8 w-16 h-1 rounded-full" style={{ background: '#c8e832' }} />
+          <div className="flex flex-col items-start gap-6 max-w-xl">
+            <div>
+              <p className="text-forest/50 text-sm font-bold uppercase tracking-widest mb-2">{t.aSavoir}</p>
+              <h2 className="font-display font-black text-4xl md:text-5xl text-forest">{t.reglementOfficiel}</h2>
             </div>
-
-            <div className="space-y-2">
-              {[
-                {
-                  titre:   'Format des matchs',
-                  contenu: "Best of 3 sets : le premier à gagner 2 sets gagne le match. Chaque set se gagne à 6 jeux avec 2 jeux d'écart, ou par tie-break à 6-6. En phase de poule, un match peut se jouer en 1 set + super tie-break selon le temps disponible.",
-                },
-                {
-                  titre:   'Classement en poule',
-                  contenu: "Victoire = 3 points. Défaite = 0 point. Pas de match nul en padel (le tie-break désigne toujours un gagnant). En cas d'égalité : 1) différence de sets, 2) sets gagnés, 3) confrontation directe.",
-                },
-                {
-                  titre:   'Qualification pour le bracket',
-                  contenu: "Le nombre de qualifiés dépend du nombre total d'équipes inscrites. Le système est automatique : avec moins de 40 équipes → bracket de 16, au-dessus → bracket de 32. Les meilleurs de chaque groupe sont qualifiés, complétés par les meilleurs deuxièmes.",
-                },
-                {
-                  titre:   'Bracket consolante',
-                  contenu: 'Toutes les équipes éliminées en phase de poule participent automatiquement à un bracket consolante. Même format. Le vainqueur est sacré champion de la consolante.',
-                },
-              ].map((rule, i) => (
-                <RuleAccordion
-                  key={i}
-                  titre={rule.titre}
-                  contenu={rule.contenu}
-                  isOpen={openRule === i}
-                  onToggle={() => setOpenRule(openRule === i ? null : i)}
-                />
-              ))}
-            </div>
+            <div className="w-16 h-1 rounded-full" style={{ background: '#c8e832' }} />
+            {rulesAvail ? (
+              <a
+                href={`${import.meta.env.VITE_API_URL || ''}/api/public/document/rules`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-forest hover:bg-forest-dark text-white font-bold px-6 py-3 rounded-xl text-sm transition-all active:scale-95"
+              >
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                {t.consulterReglement}
+              </a>
+            ) : (
+              <p className="text-forest/40 text-sm italic">{t.reglement} — {lang === 'fr' ? 'bientôt disponible' : 'coming soon'}</p>
+            )}
           </div>
         </div>
       </section>
@@ -846,18 +826,18 @@ export default function HomePage() {
           <div className="grid md:grid-cols-2 gap-6 max-w-xl mx-auto">
 
             <div className="bg-white/10 border border-white/15 rounded-2xl p-6 text-center hover:bg-white/15 transition-colors">
-              <p className="text-lime text-xs font-bold uppercase tracking-widest mb-4">Accès rapide</p>
+              <p className="text-lime text-xs font-bold uppercase tracking-widest mb-4">{t.accesRapide}</p>
               {qrCode ? (
                 <img src={qrCode} alt="QR code du tournoi" className="mx-auto w-32 h-32 rounded-xl mb-4 bg-white p-1"/>
               ) : (
                 <div className="mx-auto w-32 h-32 bg-white/10 rounded-xl mb-4 flex items-center justify-center text-white/30 text-xs">QR code</div>
               )}
-              <h3 className="font-bold text-white mb-1">Scanner pour suivre</h3>
-              <p className="text-white/50 text-xs">Accès direct aux scores depuis ton téléphone</p>
+              <h3 className="font-bold text-white mb-1">{t.scannerPourSuivre}</h3>
+              <p className="text-white/50 text-xs">{t.accesDirect}</p>
             </div>
 
             <div className="bg-white/10 border border-white/15 rounded-2xl p-6 text-center hover:bg-white/15 transition-colors">
-              <p className="text-lime text-xs font-bold uppercase tracking-widest mb-4">Réseau social</p>
+              <p className="text-lime text-xs font-bold uppercase tracking-widest mb-4">{t.reseauSocial}</p>
               <div className="mx-auto w-32 h-32 rounded-xl mb-4 bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
                 <svg className="w-14 h-14 text-white" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
@@ -870,7 +850,7 @@ export default function HomePage() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-gradient-to-r from-pink-400 to-purple-500 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:opacity-90 transition mt-2"
               >
-                Nous suivre
+                {t.nousPartagerBtn}
               </a>
             </div>
           </div>
@@ -881,11 +861,11 @@ export default function HomePage() {
       {/* Zone : coin de court */}
       <footer className="relative z-10 bg-forest-dark py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-white/30 text-sm">© 2026 Paris Yaar Club · Tournoi de Padel</p>
+          <p className="text-white/30 text-sm">{t.copyright}</p>
           <div className="flex items-center gap-5 text-sm text-white/30">
-            <a href="/#programme" className="hover:text-white/60 transition-colors">Programme</a>
-            <a href="/#reglement" className="hover:text-white/60 transition-colors">Règlement</a>
-            <Link to="/tournoi"   className="hover:text-white/60 transition-colors">Scores live</Link>
+            <a href="/#programme" className="hover:text-white/60 transition-colors">{i18n[lang].nav.programme}</a>
+            <a href="/#reglement" className="hover:text-white/60 transition-colors">{i18n[lang].nav.reglement}</a>
+            <Link to="/tournoi"   className="hover:text-white/60 transition-colors">{t.footerScores}</Link>
           </div>
         </div>
       </footer>
@@ -895,11 +875,11 @@ export default function HomePage() {
 
 // ─── Composants utilitaires ───────────────────────────────────────────────────
 
-function TimelineItem({ num, titre, desc, status, date }) {
+function TimelineItem({ num, titre, desc, status, date, doneLabel = 'Terminé', currentLabel = 'En cours' }) {
   const styles = {
-    done:     { dot: 'bg-forest',    ring: 'ring-beige', label: 'Terminé',  labelColor: 'text-forest/60'       },
-    current:  { dot: 'bg-lime',      ring: 'ring-beige', label: 'En cours', labelColor: 'text-forest font-bold' },
-    upcoming: { dot: 'bg-forest/20', ring: 'ring-beige', label: '',         labelColor: ''                      },
+    done:     { dot: 'bg-forest',    ring: 'ring-beige', label: doneLabel,    labelColor: 'text-forest/60'       },
+    current:  { dot: 'bg-lime',      ring: 'ring-beige', label: currentLabel, labelColor: 'text-forest font-bold' },
+    upcoming: { dot: 'bg-forest/20', ring: 'ring-beige', label: '',           labelColor: ''                      },
   };
   const s = styles[status] || styles.upcoming;
 
@@ -923,29 +903,6 @@ function TimelineItem({ num, titre, desc, status, date }) {
   );
 }
 
-function RuleAccordion({ titre, contenu, isOpen, onToggle }) {
-  return (
-    <div className="border border-forest/15 rounded-xl overflow-hidden bg-white/80 backdrop-blur-sm">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-forest-50 transition-colors"
-      >
-        <span className="font-semibold text-forest">{titre}</span>
-        <svg
-          className={`w-4 h-4 text-forest/40 transition-transform shrink-0 ${isOpen ? 'rotate-180' : ''}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
-        </svg>
-      </button>
-      {isOpen && (
-        <div className="px-5 pb-4 text-forest/55 text-sm leading-relaxed border-t border-forest/8 bg-forest-50">
-          <p className="pt-4">{contenu}</p>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function StatItem({ value, label, sub }) {
   return (
