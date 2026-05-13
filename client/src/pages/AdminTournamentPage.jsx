@@ -35,21 +35,31 @@ const FORMAT_ROWS = [
   { key: 'consolanteKnockoutFormat.final', label: 'Consolante — Finale'        },
 ];
 
-const DEFAULT_FORMAT = { target: 6, maxSets: 2, tiebreakatDeuce: true };
+// Formats officiels du règlement IDPP (pré-remplis si la DB n'a pas encore de valeur)
+const OFFICIAL_FORMATS = {
+  'poolStageFormat':                { target: 6, maxSets: 1, tiebreakatDeuce: false },
+  'knockoutFormat.qf':              { target: 9, maxSets: 1, tiebreakatDeuce: false },
+  'knockoutFormat.sf':              { target: 6, maxSets: 3, tiebreakatDeuce: false },
+  'knockoutFormat.final':           { target: 6, maxSets: 3, tiebreakatDeuce: false },
+  'consolantePoolFormat':           { target: 6, maxSets: 1, tiebreakatDeuce: false },
+  'consolanteKnockoutFormat.final': { target: 6, maxSets: 3, tiebreakatDeuce: false },
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// Extrait une valeur de format depuis le document tournament (gère les clés imbriquées)
+// Extrait une valeur de format depuis le document tournament (gère les clés imbriquées).
+// Utilise OFFICIAL_FORMATS comme fallback si la DB n'a pas de valeur pour cette clé.
 function extractFormat(tournament, key) {
-  if (!tournament) return { ...DEFAULT_FORMAT };
+  const fallback = OFFICIAL_FORMATS[key] || { target: 6, maxSets: 1, tiebreakatDeuce: false };
+  if (!tournament) return { ...fallback };
   const parts = key.split('.');
   let val = tournament;
   for (const p of parts) val = val?.[p];
-  if (!val) return { ...DEFAULT_FORMAT };
+  if (!val || (!val.target && !val.maxSets)) return { ...fallback };
   return {
-    target:          val.target          ?? DEFAULT_FORMAT.target,
-    maxSets:         val.maxSets         ?? DEFAULT_FORMAT.maxSets,
-    tiebreakatDeuce: val.tiebreakatDeuce ?? DEFAULT_FORMAT.tiebreakatDeuce,
+    target:          val.target          ?? fallback.target,
+    maxSets:         val.maxSets         ?? fallback.maxSets,
+    tiebreakatDeuce: val.tiebreakatDeuce ?? fallback.tiebreakatDeuce,
   };
 }
 
@@ -470,13 +480,22 @@ export default function AdminTournamentPage() {
           />
         ))}
 
-        <button
-          onClick={saveFormats}
-          disabled={formatsSaving}
-          className="mt-5 px-5 py-2 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-lg text-white text-sm font-semibold transition-colors"
-        >
-          {formatsSaving ? 'Enregistrement...' : 'Enregistrer les formats'}
-        </button>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button
+            onClick={saveFormats}
+            disabled={formatsSaving}
+            className="px-5 py-2 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-lg text-white text-sm font-semibold transition-colors"
+          >
+            {formatsSaving ? 'Enregistrement...' : 'Enregistrer les formats'}
+          </button>
+          <button
+            onClick={() => setFormats(Object.fromEntries(FORMAT_ROWS.map(r => [r.key, { ...OFFICIAL_FORMATS[r.key] }])))}
+            className="px-5 py-2 border border-white/15 hover:border-white/30 rounded-lg text-white/50 hover:text-white text-sm font-medium transition-colors"
+            title="Remet les valeurs du règlement officiel IDPP sans modifier la DB"
+          >
+            Restaurer le règlement officiel
+          </button>
+        </div>
       </section>
 
       {/* ── Section 3 : Statut ───────────────────────────────────────────── */}

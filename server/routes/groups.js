@@ -55,10 +55,15 @@ router.get('/:id', validateObjectId, async (req, res) => {
     const rawMatches = await Match.find({ _id: { $in: group.matches } });
 
     // Matchs enrichis pour la réponse (équipes populées)
-    const matches = await Match.find({ _id: { $in: group.matches } })
+    const matchesFetched = await Match.find({ _id: { $in: group.matches } })
       .populate('team1',  'name player1 player2')
       .populate('team2',  'name player1 player2')
       .populate('winner', 'name');
+
+    // Respecter l'ordre de group.matches (MongoDB $in ne garantit pas l'ordre)
+    const matchOrder = group.matches.map(id => String(id));
+    const matchMap   = new Map(matchesFetched.map(m => [String(m._id), m]));
+    const matches    = matchOrder.map(id => matchMap.get(id)).filter(Boolean);
 
     const tiebreaker = tournament.qualificationRules?.tiebreaker ||
       ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'];

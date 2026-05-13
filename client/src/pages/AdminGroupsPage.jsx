@@ -186,15 +186,14 @@ function GroupCard({ group, setFormat, onScoreClick, onRefresh }) {
   const handleDrop = async (e) => {
     e.preventDefault();
     setDragIdx(null);
-    // Persister le nouvel ordre
+    // Capturer l'ordre courant (state optimiste déjà appliqué par handleDragOver)
+    const newOrder = matches.map(m => m._id);
     setSaving(true);
     try {
-      await api.patch(`/groups/${group._id}/match-order`, {
-        matchIds: matches.map(m => m._id),
-      });
-      onRefresh();
+      await api.patch(`/groups/${group._id}/match-order`, { matchIds: newOrder });
+      // Succès : on garde le state local tel quel — pas de re-fetch qui écraserait
     } catch (_) {
-      // En cas d'erreur, reset à l'ordre initial
+      // Échec : rollback vers l'ordre venant du parent
       setMatches(group.matches || []);
     } finally {
       setSaving(false);
