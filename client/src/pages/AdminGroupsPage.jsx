@@ -157,7 +157,50 @@ function ScoreModal({ match, setFormat, onClose, onSaved }) {
 
 function GroupCard({ group, setFormat, onScoreClick, onRefresh }) {
   const navigate = useNavigate();
-  const { standings = [], matches = [] } = group;
+  const { standings = [] } = group;
+
+  // Ordre local des matchs (drag & drop modifie cet ordre avant de persister)
+  const [matches,    setMatches]    = useState(group.matches || []);
+  const [dragIdx,    setDragIdx]    = useState(null);  // index en cours de drag
+  const [saving,     setSaving]     = useState(false);
+
+  // Synchroniser si les données du groupe changent depuis le parent
+  useEffect(() => { setMatches(group.matches || []); }, [group.matches]);
+
+  const handleDragStart = (e, idx) => {
+    setDragIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDragOver = (e, idx) => {
+    e.preventDefault();
+    if (dragIdx === null || dragIdx === idx) return;
+    // Réorganiser localement pendant le drag
+    setMatches(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIdx, 1);
+      next.splice(idx, 0, moved);
+      return next;
+    });
+    setDragIdx(idx);
+  };
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setDragIdx(null);
+    // Persister le nouvel ordre
+    setSaving(true);
+    try {
+      await api.patch(`/groups/${group._id}/match-order`, {
+        matchIds: matches.map(m => m._id),
+      });
+      onRefresh();
+    } catch (_) {
+      // En cas d'erreur, reset à l'ordre initial
+      setMatches(group.matches || []);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const handleDragEnd = () => setDragIdx(null);
 
   return (
     <div className="bg-dark-800 border border-white/10 rounded-2xl overflow-hidden">
@@ -228,19 +271,37 @@ function GroupCard({ group, setFormat, onScoreClick, onRefresh }) {
 
         {/* ── Matchs ── */}
         <div className="p-4">
-          <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Matchs</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-white/30 text-xs uppercase tracking-widest">Matchs</p>
+            <p className="text-white/20 text-xs">{saving ? 'Sauvegarde...' : 'Glisser pour réordonner'}</p>
+          </div>
           <div className="space-y-2">
-            {matches.map(match => {
+            {matches.map((match, idx) => {
               const t1 = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || '—';
               const t2 = formatTeamName(match.team2?.player1, match.team2?.player2) || match.team2?.name || '—';
               return (
-                <button
+                <div
                   key={match._id}
-                  onClick={() => onScoreClick(match)}
-                  className={`w-full text-left rounded-xl px-3 py-2.5 border transition-all hover:border-white/20 ${
-                    match.played ? 'border-white/10 bg-white/3' : 'border-white/6 bg-white/1 hover:bg-white/5'
+                  draggable
+                  onDragStart={e => handleDragStart(e, idx)}
+                  onDragOver={e => handleDragOver(e, idx)}
+                  onDrop={handleDrop}
+                  onDragEnd={handleDragEnd}
+                  className={`rounded-xl border transition-all ${
+                    dragIdx === idx
+                      ? 'border-primary-500/50 bg-primary-500/8 opacity-60'
+                      : match.played ? 'border-white/10 bg-white/3' : 'border-white/6 bg-white/1'
                   }`}
                 >
+                  <div className="flex items-center gap-1">
+                    {/* Poignée de drag */}
+                    <div className="pl-2 pr-1 py-2.5 cursor-grab active:cursor-grabbing text-white/15 hover:text-white/35 transition-colors shrink-0 select-none">
+                      ⋮⋮
+                    </div>
+                    <button
+                      onClick={() => onScoreClick(match)}
+                      className="flex-1 text-left px-2 py-2.5 hover:bg-white/5 rounded-lg transition-colors"
+                    >
                   <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-xs">
                     <div className={`truncate ${match.result === 'team1' ? 'text-white font-semibold' : 'text-white/60'}`}>
                       {t1}
@@ -265,7 +326,9 @@ function GroupCard({ group, setFormat, onScoreClick, onRefresh }) {
                       {t2}
                     </div>
                   </div>
-                </button>
+                    </button>
+                  </div>
+                </div>
               );
             })}
           </div>

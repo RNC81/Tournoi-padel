@@ -284,6 +284,38 @@ router.post('/regenerate', async (req, res) => {
   }
 });
 
+// ─── PATCH /api/groups/:id/match-order ───────────────────────────────────────
+// Réordonne les matchs d'un groupe (pour l'ordre d'affichage sur le terrain).
+// Body : { matchIds: [id1, id2, ...] } — doit contenir exactement les mêmes IDs que group.matches.
+
+router.patch('/:id/match-order', validateObjectId, async (req, res) => {
+  try {
+    const group = await Group.findById(req.params.id);
+    if (!group) return res.status(404).json({ error: 'Groupe introuvable' });
+
+    const { matchIds } = req.body;
+    if (!Array.isArray(matchIds)) {
+      return res.status(400).json({ error: 'matchIds doit être un tableau' });
+    }
+
+    // Vérifier que les IDs sont exactement les mêmes (pas d'ajout / suppression)
+    const existing = group.matches.map(id => String(id)).sort();
+    const provided = [...matchIds].map(String).sort();
+    if (JSON.stringify(existing) !== JSON.stringify(provided)) {
+      return res.status(400).json({
+        error: 'matchIds doit contenir exactement les mêmes matchs que le groupe',
+      });
+    }
+
+    group.matches = matchIds;
+    await group.save();
+
+    res.json({ message: 'Ordre des matchs mis à jour', matchIds });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
 // ─── DELETE /api/groups/:id ───────────────────────────────────────────────────
 // Supprimer un groupe manuellement (et tous ses matchs).
 
