@@ -1,15 +1,11 @@
 const express    = require('express');
 const rateLimit  = require('express-rate-limit');
-const path       = require('path');
-const fs         = require('fs');
 const mongoose   = require('mongoose');
 const Tournament = require('../models/Tournament');
 const Team       = require('../models/Team');
 const Group      = require('../models/Group');
 const Match      = require('../models/Match');
 const { computeStandings } = require('../utils/standings');
-
-const UPLOADS_DIR = path.join(__dirname, '../uploads');
 
 const router = express.Router();
 
@@ -69,74 +65,72 @@ router.get('/config', async (req, res) => {
 });
 
 // ─── GET /api/public/document/schedule/preview ───────────────────────────────
-// Retourne le contenu du fichier horaires en JSON (sans clé API).
-// Excel/ODS → { exists: true, type: 'excel', headers: [...], rows: [[...]] }
-// PDF       → { exists: true, type: 'pdf', url: '...' }
+// Aperçu du fichier horaires depuis MongoDB (sans clé API).
+// Excel/ODS → { exists: true, type: 'excel', headers, rows }
+// PDF       → { exists: true, type: 'pdf', url }
 // Absent    → { exists: false }
 
-router.get('/document/schedule/preview', (req, res) => {
-  let file;
+router.get('/document/schedule/preview', async (req, res) => {
   try {
-    const files = fs.existsSync(UPLOADS_DIR) ? fs.readdirSync(UPLOADS_DIR) : [];
-    file = files.find(f => f.startsWith('schedule.'));
+    const tournament = await Tournament.findOne()
+      .select('+documents.schedule.data documents.schedule.filename documents.schedule.contentType')
+      .lean();
+    const doc = tournament?.documents?.schedule;
+    if (!doc?.data) return res.json({ exists: false });
+
+    const isPdf = doc.filename?.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      return res.json({ exists: true, type: 'pdf', url: '/api/public/document/schedule' });
+    }
+
+    // Excel / ODS → SheetJS lit le buffer directement
+    const XLSX   = require('xlsx');
+    const buffer = Buffer.isBuffer(doc.data) ? doc.data : Buffer.from(doc.data.buffer || doc.data);
+    const wb     = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+    const ws     = wb.Sheets[wb.SheetNames[0]];
+    const data   = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    const rows   = data.filter(r => r.some(c => c !== '' && c != null));
+    return res.json({ exists: true, type: 'excel', headers: rows[0] || [], rows: rows.slice(1) });
   } catch {
-    return res.status(500).json({ error: 'Erreur serveur' });
-  }
-
-  if (!file) return res.json({ exists: false });
-
-  const filePath = path.join(UPLOADS_DIR, file);
-  const isPdf    = file.toLowerCase().endsWith('.pdf');
-
-  if (isPdf) {
-    return res.json({
-      exists: true,
-      type:   'pdf',
-      url:    '/api/public/document/schedule',
-    });
-  }
-
-  // Excel / ODS → SheetJS
-  try {
-    const XLSX = require('xlsx');
-    const wb   = XLSX.readFile(filePath, { cellDates: true });
-    const ws   = wb.Sheets[wb.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-    // Supprimer les lignes entièrement vides
-    const rows = data.filter(r => r.some(c => c !== '' && c != null));
-    const headers = rows[0] || [];
-    return res.json({ exists: true, type: 'excel', headers, rows: rows.slice(1) });
-  } catch {
-    return res.status(500).json({ error: 'Impossible de lire le fichier' });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
 // ─── GET /api/public/document/:type ──────────────────────────────────────────
-// Sert un document uploadé (règlement PDF ou horaires Excel) sans clé API.
+// Sert le document depuis MongoDB (sans clé API).
 // ?info=1 → retourne les métadonnées JSON au lieu du fichier.
 
-router.get('/document/:type', (req, res) => {
+router.get('/document/:type', async (req, res) => {
   const ALLOWED = ['rules', 'schedule'];
   const { type } = req.params;
   if (!ALLOWED.includes(type)) {
     return res.status(400).json({ error: 'Type invalide' });
   }
-  let file;
   try {
-    const files = fs.existsSync(UPLOADS_DIR) ? fs.readdirSync(UPLOADS_DIR) : [];
-    file = files.find(f => f.startsWith(`${type}.`));
+    if (req.query.info) {
+      // Métadonnées seulement — pas de buffer
+      const tournament = await Tournament.findOne()
+        .select(`documents.${type}.filename documents.${type}.contentType documents.${type}.uploadedAt`)
+        .lean();
+      const doc = tournament?.documents?.[type];
+      if (!doc?.filename) return res.json({ exists: false });
+      return res.json({ exists: true, filename: doc.filename, updatedAt: doc.uploadedAt });
+    }
+
+    // Servir le fichier — inclure le buffer (select: false par défaut)
+    const tournament = await Tournament.findOne()
+      .select(`+documents.${type}.data documents.${type}.contentType documents.${type}.filename`)
+      .lean();
+    const doc = tournament?.documents?.[type];
+    if (!doc?.data) return res.status(404).json({ error: 'Document non disponible' });
+
+    const buffer = Buffer.isBuffer(doc.data) ? doc.data : Buffer.from(doc.data.buffer || doc.data);
+    res.set('Content-Type', doc.contentType || 'application/octet-stream');
+    res.set('Content-Disposition', `inline; filename="${doc.filename}"`);
+    res.send(buffer);
   } catch {
-    return res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
-  if (!file) {
-    if (req.query.info) return res.json({ exists: false });
-    return res.status(404).json({ error: 'Document non disponible' });
-  }
-  if (req.query.info) {
-    const stat = fs.statSync(path.join(UPLOADS_DIR, file));
-    return res.json({ exists: true, filename: file, size: stat.size, updatedAt: stat.mtime.toISOString() });
-  }
-  res.download(path.join(UPLOADS_DIR, file), file);
 });
 
 router.use(apiKeyAuth);

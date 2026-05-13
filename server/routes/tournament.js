@@ -1,7 +1,5 @@
 const crypto     = require('crypto');
 const express    = require('express');
-const path       = require('path');
-const fs         = require('fs');
 const multer     = require('multer');
 const Tournament = require('../models/Tournament');
 const Group      = require('../models/Group');
@@ -12,37 +10,22 @@ const safeError  = require('../utils/safeError');
 
 const router = express.Router();
 
-// ─── Configuration upload documents ──────────────────────────────────────────
+// ─── Upload documents — mémoire (buffer → MongoDB) ───────────────────────────
+// Les fichiers ne sont jamais écrits sur disque : Render free tier a un
+// filesystem éphémère. On stocke le Buffer directement dans Tournament.documents.
 
-const UPLOADS_DIR   = path.join(__dirname, '../uploads');
-const ALLOWED_TYPES = ['rules', 'schedule'];
-// Mimes acceptés pour le règlement (PDF seulement)
-const RULES_MIMES = ['application/pdf'];
-
-// Pour les horaires, on accepte tout — certains navigateurs envoient
-// application/octet-stream pour .ods / .xlsm, impossible à filtrer côté serveur.
-
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-
-// Sauvegarde le fichier sous la forme [type].[ext] (ex: rules.pdf, schedule.xlsx)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-  filename:    (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.bin';
-    cb(null, `${req.params.type}${ext}`);
-  },
-});
+const ALLOWED_DOC_TYPES = ['rules', 'schedule'];
 
 const upload = multer({
-  storage,
-  limits:     { fileSize: 10 * 1024 * 1024 }, // 10 Mo max
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 10 * 1024 * 1024 }, // 10 Mo max
   fileFilter: (req, file, cb) => {
     if (req.params.type === 'rules') {
       // Règlement : PDF uniquement
-      if (RULES_MIMES.includes(file.mimetype)) cb(null, true);
+      if (file.mimetype === 'application/pdf') cb(null, true);
       else cb(new Error('Le règlement doit être un fichier PDF'));
     } else {
-      // Horaires : on accepte tout (PDF, xlsx, xlsm, ods, octet-stream...)
+      // Horaires : tout accepté (xlsx, xlsm, ods, octet-stream…)
       cb(null, true);
     }
   },
@@ -344,18 +327,13 @@ router.post('/reset/all', async (req, res) => {
 });
 
 // ─── POST /api/tournament/document/:type ──────────────────────────────────────
-// Upload un document (règlement PDF ou horaires Excel).
-// Remplace le fichier existant du même type.
+// Upload un document — buffer lu en mémoire puis stocké dans MongoDB.
+// Remplace automatiquement le document existant du même type.
 
 router.post('/document/:type',
   (req, res, next) => {
-    if (!ALLOWED_TYPES.includes(req.params.type)) {
+    if (!ALLOWED_DOC_TYPES.includes(req.params.type)) {
       return res.status(400).json({ error: 'Type invalide. Valeurs : rules, schedule' });
-    }
-    // Supprimer l'ancien fichier avant l'upload
-    const existing = fs.readdirSync(UPLOADS_DIR).find(f => f.startsWith(`${req.params.type}.`));
-    if (existing) {
-      try { fs.unlinkSync(path.join(UPLOADS_DIR, existing)); } catch (_) {}
     }
     next();
   },
@@ -365,23 +343,48 @@ router.post('/document/:type',
       next();
     });
   },
-  (req, res) => {
+  async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
-    res.json({ filename: req.file.filename, size: req.file.size, uploadedAt: new Date().toISOString() });
+    const { type } = req.params;
+    try {
+      const tournament = await Tournament.findOne();
+      if (!tournament) return res.status(404).json({ error: 'Aucun tournoi configuré' });
+
+      await Tournament.findOneAndUpdate(
+        {},
+        { $set: { [`documents.${type}`]: {
+            data:        req.file.buffer,
+            contentType: req.file.mimetype || 'application/octet-stream',
+            filename:    req.file.originalname,
+            uploadedAt:  new Date(),
+          } } }
+      );
+
+      res.json({
+        filename:   req.file.originalname,
+        size:       req.file.size,
+        uploadedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+    }
   }
 );
 
 // ─── DELETE /api/tournament/document/:type ────────────────────────────────────
-// Supprimer un document uploadé.
+// Supprime un document de la base MongoDB.
 
-router.delete('/document/:type', (req, res) => {
-  if (!ALLOWED_TYPES.includes(req.params.type)) {
+router.delete('/document/:type', async (req, res) => {
+  const { type } = req.params;
+  if (!ALLOWED_DOC_TYPES.includes(type)) {
     return res.status(400).json({ error: 'Type invalide' });
   }
-  const file = fs.readdirSync(UPLOADS_DIR).find(f => f.startsWith(`${req.params.type}.`));
-  if (!file) return res.status(404).json({ error: 'Document introuvable' });
   try {
-    fs.unlinkSync(path.join(UPLOADS_DIR, file));
+    const tournament = await Tournament.findOne().select(`documents.${type}.filename`).lean();
+    if (!tournament?.documents?.[type]?.filename) {
+      return res.status(404).json({ error: 'Document introuvable' });
+    }
+    await Tournament.findOneAndUpdate({}, { $unset: { [`documents.${type}`]: 1 } });
     res.json({ message: 'Document supprimé' });
   } catch {
     res.status(500).json({ error: 'Erreur lors de la suppression' });
@@ -389,16 +392,28 @@ router.delete('/document/:type', (req, res) => {
 });
 
 // ─── GET /api/tournament/document/:type ──────────────────────────────────────
-// Infos sur le document (admin) — { exists, filename, size, updatedAt }.
+// Métadonnées du document (admin) — jamais le buffer.
 
-router.get('/document/:type', (req, res) => {
-  if (!ALLOWED_TYPES.includes(req.params.type)) {
+router.get('/document/:type', async (req, res) => {
+  const { type } = req.params;
+  if (!ALLOWED_DOC_TYPES.includes(type)) {
     return res.status(400).json({ error: 'Type invalide' });
   }
-  const file = fs.readdirSync(UPLOADS_DIR).find(f => f.startsWith(`${req.params.type}.`));
-  if (!file) return res.json({ exists: false });
-  const stat = fs.statSync(path.join(UPLOADS_DIR, file));
-  res.json({ exists: true, filename: file, size: stat.size, updatedAt: stat.mtime.toISOString() });
+  try {
+    const tournament = await Tournament.findOne()
+      .select(`documents.${type}.filename documents.${type}.contentType documents.${type}.uploadedAt`)
+      .lean();
+    const doc = tournament?.documents?.[type];
+    if (!doc?.filename) return res.json({ exists: false });
+    res.json({
+      exists:     true,
+      filename:   doc.filename,
+      contentType: doc.contentType,
+      updatedAt:  doc.uploadedAt,
+    });
+  } catch {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
 });
 
 module.exports = router;

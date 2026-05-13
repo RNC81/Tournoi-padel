@@ -83,6 +83,25 @@ const tournamentSchema = new Schema(
         default: ['wins', 'gameDiff', 'gamesWon', 'directConfrontation'],
       },
     },
+
+    // ── Documents (règlement PDF, horaires Excel/ODS) ────────────────────────
+    // Le Buffer data est exclu par défaut (select: false) pour ne pas alourdir
+    // les requêtes normales. Utiliser .select('+documents.X.data') pour le lire.
+
+    documents: {
+      rules: {
+        data:        { type: Buffer, select: false },
+        contentType: { type: String },
+        filename:    { type: String },
+        uploadedAt:  { type: Date },
+      },
+      schedule: {
+        data:        { type: Buffer, select: false },
+        contentType: { type: String },
+        filename:    { type: String },
+        uploadedAt:  { type: Date },
+      },
+    },
   },
   { timestamps: true }
 );
