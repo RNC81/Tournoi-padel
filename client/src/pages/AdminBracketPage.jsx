@@ -349,14 +349,18 @@ function ManualDrawModal({ phase, matches, mainTeams, onClose, onSaved }) {
                   className={SEL}>
                   <option value="">-- Équipe 1 --</option>
                   {mainTeams.map(t => (
-                    <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
+                    <option key={t._id} value={String(t._id)}>
+                      {t.group?.name ? `Poule ${t.group.name} · ${formatTeamLabel(t)}` : formatTeamLabel(t)}
+                    </option>
                   ))}
                 </select>
                 <select value={p.team2Id} onChange={e => updatePair(p.matchId, 'team2Id', e.target.value)}
                   className={SEL}>
                   <option value="">-- Équipe 2 --</option>
                   {mainTeams.map(t => (
-                    <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
+                    <option key={t._id} value={String(t._id)}>
+                      {t.group?.name ? `Poule ${t.group.name} · ${formatTeamLabel(t)}` : formatTeamLabel(t)}
+                    </option>
                   ))}
                 </select>
               </div>

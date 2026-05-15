@@ -347,7 +347,9 @@ function BarrageMatchModal({ match, barrageTeams, onClose, onSaved }) {
                 className={SEL_V}>
                 <option value="">-- Équipe 1 --</option>
                 {barrageTeams.map(t => (
-                  <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
+                  <option key={t._id} value={String(t._id)}>
+                    {t.group?.name ? `Poule ${t.group.name} · ${formatTeamLabel(t)}` : formatTeamLabel(t)}
+                  </option>
                 ))}
               </select>
               <select value={team2Id}
@@ -355,7 +357,9 @@ function BarrageMatchModal({ match, barrageTeams, onClose, onSaved }) {
                 className={SEL_V}>
                 <option value="">-- Équipe 2 --</option>
                 {barrageTeams.map(t => (
-                  <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
+                  <option key={t._id} value={String(t._id)}>
+                    {t.group?.name ? `Poule ${t.group.name} · ${formatTeamLabel(t)}` : formatTeamLabel(t)}
+                  </option>
                 ))}
               </select>
             </div>
@@ -515,29 +519,52 @@ function BarrageManualDrawModal({ matches, barrageTeams, onClose, onSaved }) {
         )}
 
         <div className="space-y-3">
-          {pairs.map((p) => (
-            <div key={p.matchId} className="bg-dark-700/50 border border-white/8 rounded-xl p-3">
-              <p className="text-white/25 text-xs mb-2 font-mono">Match {p.position}</p>
-              <div className="space-y-2">
-                <select value={p.team1Id}
-                  onChange={e => updatePair(p.matchId, 'team1Id', e.target.value)}
-                  className={SEL_V}>
-                  <option value="">-- Équipe 1 --</option>
-                  {barrageTeams.map(t => (
-                    <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
-                  ))}
-                </select>
-                <select value={p.team2Id}
-                  onChange={e => updatePair(p.matchId, 'team2Id', e.target.value)}
-                  className={SEL_V}>
-                  <option value="">-- Équipe 2 --</option>
-                  {barrageTeams.map(t => (
-                    <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
-                  ))}
-                </select>
+          {pairs.map((p) => {
+            const t1 = barrageTeams.find(t => String(t._id) === p.team1Id);
+            const t2 = barrageTeams.find(t => String(t._id) === p.team2Id);
+            const g1 = t1?.group ? String(t1.group._id || t1.group) : null;
+            const g2 = t2?.group ? String(t2.group._id || t2.group) : null;
+            const sameGroup = g1 && g2 && g1 === g2;
+
+            return (
+              <div key={p.matchId} className={`border rounded-xl p-3 ${
+                sameGroup
+                  ? 'bg-orange-500/8 border-orange-500/40'
+                  : 'bg-dark-700/50 border-white/8'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-white/25 text-xs font-mono">Match {p.position}</p>
+                  {sameGroup && (
+                    <span className="text-orange-400 text-xs font-medium">
+                      ⚠ Même poule ({t1.group?.name})
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <select value={p.team1Id}
+                    onChange={e => updatePair(p.matchId, 'team1Id', e.target.value)}
+                    className={SEL_V}>
+                    <option value="">-- Équipe 1 --</option>
+                    {barrageTeams.map(t => (
+                      <option key={t._id} value={String(t._id)}>
+                        {t.group?.name ? `Poule ${t.group.name} · ${formatTeamLabel(t)}` : formatTeamLabel(t)}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={p.team2Id}
+                    onChange={e => updatePair(p.matchId, 'team2Id', e.target.value)}
+                    className={SEL_V}>
+                    <option value="">-- Équipe 2 --</option>
+                    {barrageTeams.map(t => (
+                      <option key={t._id} value={String(t._id)}>
+                        {t.group?.name ? `Poule ${t.group.name} · ${formatTeamLabel(t)}` : formatTeamLabel(t)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="flex gap-3 justify-end mt-6">
