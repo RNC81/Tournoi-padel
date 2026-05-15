@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
-import { formatTeamName } from '../utils/formatTeam';
+import { formatTeamName, formatTeamLabel } from '../utils/formatTeam';
 
 // ─── CONSTANTES ───────────────────────────────────────────────────────────────
 
@@ -203,6 +203,351 @@ function ScoreModal({ match, onClose, onSaved }) {
               {loading ? 'Sauvegarde...' : 'Enregistrer'}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── BARRAGE MATCH MODAL ─────────────────────────────────────────────────────
+// Même logique que BracketMatchModal du bracket principal : édition équipes + score.
+// barrageTeams = équipes avec tournamentPath=null et groupRank >= 5.
+
+function BarrageMatchModal({ match, barrageTeams, onClose, onSaved }) {
+  const setsToWin    = match.setFormat?.maxSets ?? 2;
+  const maxTotalSets = setsToWin * 2 - 1;
+
+  const [team1Id, setTeam1Id] = useState(String(match.team1?._id || match.team1 || ''));
+  const [team2Id, setTeam2Id] = useState(String(match.team2?._id || match.team2 || ''));
+  const [teamsError, setTeamsError] = useState('');
+  const [teamsSaved, setTeamsSaved] = useState(false);
+
+  const initSets = () => {
+    const existing = match.sets || [];
+    return Array.from({ length: maxTotalSets }, (_, i) => ({
+      score1: existing[i]?.score1 ?? '',
+      score2: existing[i]?.score2 ?? '',
+    }));
+  };
+  const [sets,    setSets]    = useState(initSets);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
+
+  const origT1 = String(match.team1?._id || match.team1 || '');
+  const origT2 = String(match.team2?._id || match.team2 || '');
+  const teamsChanged = team1Id !== origT1 || team2Id !== origT2;
+
+  const findLabel = (id) => {
+    const t = barrageTeams.find(t => String(t._id) === id);
+    return t ? formatTeamLabel(t) : (id ? '...' : '?');
+  };
+  const t1Label = match.played
+    ? (match.team1 ? formatTeamLabel(match.team1) : '?')
+    : findLabel(team1Id);
+  const t2Label = match.played
+    ? (match.team2 ? formatTeamLabel(match.team2) : '?')
+    : findLabel(team2Id);
+
+  const decisiveSets = sets.slice(0, setsToWin).filter(s => s.score1 !== '' && s.score2 !== '');
+  let w1 = 0, w2 = 0;
+  for (const s of decisiveSets) {
+    if (Number(s.score1) > Number(s.score2)) w1++;
+    else if (Number(s.score2) > Number(s.score1)) w2++;
+  }
+  const hasDecider   = sets[setsToWin]?.score1 !== '' || sets[setsToWin]?.score2 !== '';
+  const isTied       = decisiveSets.length === setsToWin && w1 === w2;
+  const showDecider  = maxTotalSets > setsToWin && (hasDecider || isTied);
+  const visibleCount = showDecider ? maxTotalSets : setsToWin;
+
+  const updateSet = (i, field, val) => {
+    setSets(prev => {
+      const next = [...prev];
+      next[i] = { ...next[i], [field]: val === '' ? '' : parseInt(val, 10) };
+      return next;
+    });
+  };
+
+  const handleSaveTeams = async () => {
+    if (!team1Id || !team2Id) { setTeamsError('Sélectionnez les deux équipes'); return; }
+    if (team1Id === team2Id)  { setTeamsError('Les deux équipes doivent être différentes'); return; }
+    setLoading(true);
+    setTeamsError('');
+    try {
+      await api.put(`/matches/${match._id}/teams`, { team1: team1Id, team2: team2Id });
+      setTeamsSaved(true);
+      onSaved();
+    } catch (err) {
+      setTeamsError(err.response?.data?.error || 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveScore = async () => {
+    const filledSets = sets.slice(0, visibleCount).filter(s => s.score1 !== '' && s.score2 !== '');
+    if (!filledSets.length) { setError('Saisissez au moins un set joué'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      if (!match.played && teamsChanged && !teamsSaved) {
+        if (!team1Id || !team2Id || team1Id === team2Id) {
+          setError('Sélectionnez deux équipes différentes');
+          setLoading(false);
+          return;
+        }
+        await api.put(`/matches/${match._id}/teams`, { team1: team1Id, team2: team2Id });
+      }
+      await api.put(`/matches/${match._id}/score`, { sets: filledSets });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erreur lors de la sauvegarde');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setLoading(true);
+    try {
+      await api.delete(`/matches/${match._id}/score`);
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const canShowScore = match.played || (team1Id && team2Id);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="relative bg-dark-800 border border-white/15 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <h3 className="font-display font-bold text-lg text-white">Barrage consolante</h3>
+            <p className="text-white/40 text-xs mt-0.5">Match #{match.position}</p>
+          </div>
+          <button onClick={onClose}
+            className="text-white/30 hover:text-white/60 transition-colors text-2xl leading-none mt-0.5">
+            &times;
+          </button>
+        </div>
+
+        {!match.played && (
+          <div className="mb-5">
+            <p className="text-xs text-white/40 uppercase tracking-widest mb-2">Équipes</p>
+            <div className="space-y-2">
+              <select value={team1Id}
+                onChange={e => { setTeam1Id(e.target.value); setTeamsSaved(false); setTeamsError(''); }}
+                className={SEL_V}>
+                <option value="">-- Équipe 1 --</option>
+                {barrageTeams.map(t => (
+                  <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
+                ))}
+              </select>
+              <select value={team2Id}
+                onChange={e => { setTeam2Id(e.target.value); setTeamsSaved(false); setTeamsError(''); }}
+                className={SEL_V}>
+                <option value="">-- Équipe 2 --</option>
+                {barrageTeams.map(t => (
+                  <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
+                ))}
+              </select>
+            </div>
+            {teamsError && <p className="text-red-400 text-xs mt-1.5">{teamsError}</p>}
+            {teamsSaved && <p className="text-violet-400 text-xs mt-1.5">Équipes mises à jour</p>}
+            {teamsChanged && !teamsSaved && team1Id && team2Id && (
+              <button onClick={handleSaveTeams} disabled={loading}
+                className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-violet-500/40 text-violet-400 hover:bg-violet-500/10 transition-colors disabled:opacity-50">
+                {loading ? 'Sauvegarde...' : 'Enregistrer les équipes seules'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {match.played && (
+          <p className="text-white/40 text-sm mb-5">
+            {t1Label} <span className="text-white/20 mx-1">vs</span> {t2Label}
+          </p>
+        )}
+
+        {canShowScore && (
+          <>
+            <div className={`${!match.played ? 'border-t border-white/8 pt-4' : ''} mb-4`}>
+              <p className="text-xs text-white/40 uppercase tracking-widest mb-3">Score</p>
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg px-3 py-2 mb-4">
+                  {error}
+                </div>
+              )}
+              <div className="grid grid-cols-[1fr_2.5rem_1fr] gap-2 mb-2 text-xs text-white/30 text-center">
+                <span className="text-right pr-2 truncate">{t1Label}</span>
+                <span />
+                <span className="text-left pl-2 truncate">{t2Label}</span>
+              </div>
+              <div className="space-y-2 mb-6">
+                {sets.slice(0, visibleCount).map((set, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_2.5rem_1fr] items-center gap-2">
+                    <input type="number" min="0" max="99" placeholder="—" value={set.score1}
+                      onChange={e => updateSet(i, 'score1', e.target.value)}
+                      className="input text-center text-lg font-bold py-2" />
+                    <div className={`text-center text-sm font-bold ${i === setsToWin ? 'text-violet-400' : 'text-white/20'}`}>
+                      S{i + 1}
+                    </div>
+                    <input type="number" min="0" max="99" placeholder="—" value={set.score2}
+                      onChange={e => updateSet(i, 'score2', e.target.value)}
+                      className="input text-center text-lg font-bold py-2" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              {match.played && match.sets?.length > 0 && (
+                <button onClick={handleReset} disabled={loading}
+                  className="px-3 py-2 text-xs text-red-400/60 hover:text-red-400 transition-colors disabled:opacity-50">
+                  Réinitialiser
+                </button>
+              )}
+              <div className="flex gap-3 ml-auto">
+                <button onClick={onClose} className="px-4 py-2 text-sm text-white/40 hover:text-white">
+                  Annuler
+                </button>
+                <button onClick={handleSaveScore} disabled={loading}
+                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors">
+                  {loading ? 'Sauvegarde...' : 'Enregistrer le score'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {!canShowScore && (
+          <div className="flex justify-end mt-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-white/40 hover:text-white">
+              Fermer
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── BARRAGE MANUAL DRAW MODAL ────────────────────────────────────────────────
+// Recomposer toutes les paires du barrage avant de saisir les scores.
+
+function BarrageManualDrawModal({ matches, barrageTeams, onClose, onSaved }) {
+  const [pairs, setPairs] = useState(
+    matches
+      .slice()
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+      .map(m => ({
+        matchId:  String(m._id),
+        position: m.position,
+        team1Id:  String(m.team1?._id || m.team1 || ''),
+        team2Id:  String(m.team2?._id || m.team2 || ''),
+      }))
+  );
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
+  const [saved,   setSaved]   = useState(false);
+
+  const updatePair = (matchId, field, val) => {
+    setPairs(prev => prev.map(p => p.matchId === matchId ? { ...p, [field]: val } : p));
+  };
+
+  const handleConfirm = async () => {
+    for (const p of pairs) {
+      if (!p.team1Id || !p.team2Id) {
+        setError('Toutes les paires doivent avoir deux équipes'); return;
+      }
+      if (p.team1Id === p.team2Id) {
+        setError('Chaque paire doit avoir deux équipes différentes'); return;
+      }
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await Promise.all(
+        pairs.map(p => api.put(`/matches/${p.matchId}/teams`, { team1: p.team1Id, team2: p.team2Id }))
+      );
+      setSaved(true);
+      onSaved();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erreur lors de la mise à jour');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="relative bg-dark-800 border border-white/15 rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <h3 className="font-display font-bold text-lg text-white">Recomposer les paires barrage</h3>
+            <p className="text-white/40 text-xs mt-0.5">
+              Composez les {matches.length} paire{matches.length > 1 ? 's' : ''} manuellement
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="text-white/30 hover:text-white/60 transition-colors text-2xl leading-none mt-0.5">
+            &times;
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg px-3 py-2 mb-4">
+            {error}
+          </div>
+        )}
+        {saved && (
+          <div className="bg-violet-500/10 border border-violet-500/30 text-violet-300 text-sm rounded-lg px-3 py-2 mb-4">
+            Paires enregistrées
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {pairs.map((p) => (
+            <div key={p.matchId} className="bg-dark-700/50 border border-white/8 rounded-xl p-3">
+              <p className="text-white/25 text-xs mb-2 font-mono">Match {p.position}</p>
+              <div className="space-y-2">
+                <select value={p.team1Id}
+                  onChange={e => updatePair(p.matchId, 'team1Id', e.target.value)}
+                  className={SEL_V}>
+                  <option value="">-- Équipe 1 --</option>
+                  {barrageTeams.map(t => (
+                    <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
+                  ))}
+                </select>
+                <select value={p.team2Id}
+                  onChange={e => updatePair(p.matchId, 'team2Id', e.target.value)}
+                  className={SEL_V}>
+                  <option value="">-- Équipe 2 --</option>
+                  {barrageTeams.map(t => (
+                    <option key={t._id} value={String(t._id)}>{formatTeamLabel(t)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-3 justify-end mt-6">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-white/40 hover:text-white">
+            Annuler
+          </button>
+          <button onClick={handleConfirm} disabled={loading || saved}
+            className="px-5 py-2 rounded-xl text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors">
+            {loading ? 'Enregistrement...' : saved ? 'Enregistré' : 'Confirmer'}
+          </button>
         </div>
       </div>
     </div>
@@ -779,9 +1124,10 @@ function WizardStep2({ eligibleCount, format, bracketTarget, numGroups,
 
 // ─── VUE BARRAGE CONSOLANTE ───────────────────────────────────────────────────
 
-function BarrageView({ matches, onScoreClick, onRefresh, onGenerateBracket, onDeleteBarrage }) {
+function BarrageView({ matches, barrageTeams, onEditClick, onRefresh, onGenerateBracket, onDeleteBarrage, onManualDraw }) {
   const played    = matches.filter(m => m.played).length;
   const allPlayed = played === matches.length && matches.length > 0;
+  const canRecompose = matches.some(m => !m.played);
 
   return (
     <div className="max-w-xl mx-auto space-y-5">
@@ -796,11 +1142,19 @@ function BarrageView({ matches, onScoreClick, onRefresh, onGenerateBracket, onDe
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {canRecompose && (
+            <button
+              onClick={onManualDraw}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-violet-500/30 text-violet-400 hover:bg-violet-500/10 transition-colors"
+            >
+              Recomposer
+            </button>
+          )}
           <div className={`w-2.5 h-2.5 rounded-full ${allPlayed ? 'bg-lime' : 'bg-violet-400 animate-pulse'}`} />
         </div>
       </div>
 
-      {/* Liste des matchs */}
+      {/* Liste des matchs — cartes cliquables */}
       <div className="space-y-2">
         {matches.map(match => {
           const t1 = formatTeamName(match.team1?.player1, match.team1?.player2) || match.team1?.name || '—';
@@ -812,7 +1166,8 @@ function BarrageView({ matches, onScoreClick, onRefresh, onGenerateBracket, onDe
           return (
             <div
               key={match._id}
-              className="bg-dark-700 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3"
+              onClick={() => onEditClick(match)}
+              className="bg-dark-700 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:border-violet-500/30 hover:bg-dark-600 transition-all select-none"
             >
               <span className={`flex-1 text-sm font-medium truncate ${
                 t1Win ? 'text-white' : t2Win ? 'text-white/25' : 'text-white/60'
@@ -822,7 +1177,7 @@ function BarrageView({ matches, onScoreClick, onRefresh, onGenerateBracket, onDe
               <div className="text-center shrink-0">
                 {match.played ? (
                   <span className="text-white/50 text-xs font-mono">
-                    {match.sets?.map((s, i) => `${s.score1}-${s.score2}`).join(' ')}
+                    {match.sets?.map((s) => `${s.score1}-${s.score2}`).join(' ')}
                   </span>
                 ) : (
                   <span className="text-white/20 text-xs">vs</span>
@@ -833,12 +1188,9 @@ function BarrageView({ matches, onScoreClick, onRefresh, onGenerateBracket, onDe
               }`}>
                 {t2}
               </span>
-              <button
-                onClick={() => onScoreClick(match)}
-                className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/15 text-violet-400 hover:bg-violet-500/25 transition-colors"
-              >
-                {match.played ? 'Modifier' : 'Score'}
-              </button>
+              <span className="shrink-0 text-violet-400/50 text-xs">
+                {match.played ? 'Modifier →' : 'Saisir →'}
+              </span>
             </div>
           );
         })}
@@ -1109,7 +1461,10 @@ export default function AdminConsolantePage() {
   const [wizardError,   setWizardError]   = useState('');
 
   // Barrage
-  const [barrageMatches,  setBarrageMatches]  = useState([]);
+  const [barrageMatches,   setBarrageMatches]   = useState([]);
+  const [barrageTeams,     setBarrageTeams]     = useState([]);
+  const [barrageEditMatch, setBarrageEditMatch] = useState(null);
+  const [barrageManualDraw, setBarrageManualDraw] = useState(false);
   // Phases pour lesquelles l'admin a déjà configuré/ignoré le format
   const [formatDismissed, setFormatDismissed] = useState(new Set());
 
@@ -1162,10 +1517,18 @@ export default function AdminConsolantePage() {
         barrage = barrageRes.data || [];
       } catch (_) {}
 
+      // 6. Équipes éligibles barrage (tournamentPath=null, groupRank >= 5)
+      let bTeams = [];
+      try {
+        const bTeamsRes = await api.get('/teams?tournamentPath=null');
+        bTeams = (bTeamsRes.data || []).filter(t => t.groupRank == null || t.groupRank >= 5);
+      } catch (_) {}
+
       setByPhase(newByPhase);
       setTournament(t);
       setEligibleCount(eligible);
       setBarrageMatches(barrage);
+      setBarrageTeams(bTeams);
 
       if (hasBracket) {
         setPageView('bracket');
@@ -1344,7 +1707,9 @@ export default function AdminConsolantePage() {
       {pageView === 'barrage' && (
         <BarrageView
           matches={barrageMatches}
-          onScoreClick={match => setScoreMatch(match)}
+          barrageTeams={barrageTeams}
+          onEditClick={match => setBarrageEditMatch(match)}
+          onManualDraw={() => setBarrageManualDraw(true)}
           onRefresh={fetchAll}
           onGenerateBracket={async () => {
             try {
@@ -1439,13 +1804,39 @@ export default function AdminConsolantePage() {
         </>
       )}
 
-      {/* Modal saisie score */}
+      {/* Modal saisie score (bracket consolante) */}
       {scoreMatch && (
         <ScoreModal
           match={scoreMatch}
           onClose={() => setScoreMatch(null)}
           onSaved={() => {
             showToast('ok', 'Score enregistré');
+            fetchAll();
+          }}
+        />
+      )}
+
+      {/* Modal barrage : édition équipes + score */}
+      {barrageEditMatch && (
+        <BarrageMatchModal
+          match={barrageEditMatch}
+          barrageTeams={barrageTeams}
+          onClose={() => setBarrageEditMatch(null)}
+          onSaved={() => {
+            showToast('ok', 'Score barrage enregistré');
+            fetchAll();
+          }}
+        />
+      )}
+
+      {/* Modal tirage manuel barrage */}
+      {barrageManualDraw && (
+        <BarrageManualDrawModal
+          matches={barrageMatches}
+          barrageTeams={barrageTeams}
+          onClose={() => setBarrageManualDraw(false)}
+          onSaved={() => {
+            showToast('ok', 'Paires barrage mises à jour');
             fetchAll();
           }}
         />

@@ -326,6 +326,49 @@ router.post('/reset/all', async (req, res) => {
   }
 });
 
+// ─── POST /api/tournament/reset/consolante ────────────────────────────────────
+// Supprime tous les matchs consolante (barrage + bracket) et remet les équipes
+// consolante à tournamentPath=null.
+// NE touche PAS au bracket principal ni aux équipes tournamentPath='main'.
+// Body : { confirm: true }
+
+router.post('/reset/consolante', async (req, res) => {
+  try {
+    if (!req.body.confirm) {
+      return res.status(400).json({ error: 'Confirmation requise : { confirm: true }' });
+    }
+
+    const tournament = await Tournament.findOne();
+    if (!tournament) return res.status(404).json({ error: 'Aucun tournoi configuré' });
+
+    const consolantePhases = [
+      'consolante_barrage',
+      'consolante_pool',
+      'consolante_r32', 'consolante_r16',
+      'consolante_qf', 'consolante_sf', 'consolante_final',
+    ];
+
+    const matchesDeleted = await Match.deleteMany({
+      tournament: tournament._id,
+      phase: { $in: consolantePhases },
+    });
+
+    // Remettre les équipes consolante à null (éligibles de nouveau)
+    const teamsUpdated = await Team.updateMany(
+      { tournamentPath: 'consolante' },
+      { $set: { tournamentPath: null } }
+    );
+
+    res.json({
+      message: 'Consolante réinitialisée',
+      matchesDeleted: matchesDeleted.deletedCount,
+      teamsUpdated:   teamsUpdated.modifiedCount,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
 // ─── POST /api/tournament/document/:type ──────────────────────────────────────
 // Upload un document — buffer lu en mémoire puis stocké dans MongoDB.
 // Remplace automatiquement le document existant du même type.

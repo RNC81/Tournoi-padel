@@ -301,6 +301,10 @@ export default function AdminTournamentPage() {
         title:   'Réinitialiser les poules ?',
         message: 'Tous les groupes et matchs de poule seront supprimés. Les équipes restent inscrites mais leur groupe est remis à zéro.',
       },
+      consolante: {
+        title:   'Réinitialiser la consolante ?',
+        message: 'Tous les matchs consolante (barrage + bracket) seront supprimés. Le bracket principal et les poules restent intacts. Les équipes consolante retrouvent leur statut éligible.',
+      },
       bracket: {
         title:   'Réinitialiser le bracket ?',
         message: 'Tous les matchs knockout (principal + consolante) seront supprimés. Les poules et le tirage restent intacts.',
@@ -607,9 +611,15 @@ export default function AdminTournamentPage() {
               btnLabel:'Reset poules',
             },
             {
+              type:    'consolante',
+              title:   'Réinitialiser la consolante',
+              desc:    'Supprime le barrage + bracket consolante. Bracket principal intact.',
+              btnLabel:'Reset consolante',
+            },
+            {
               type:    'bracket',
               title:   'Réinitialiser le bracket',
-              desc:    'Supprime tous les matchs knockout. Les poules restent intactes.',
+              desc:    'Supprime tous les matchs knockout (principal + consolante). Les poules restent intactes.',
               btnLabel:'Reset bracket',
             },
             {
