@@ -314,39 +314,41 @@ function BracketRound({ phase, matches, onScoreClick, containerHeight }) {
 // ─── WIZARD : Étape 0 — Gestion du pool consolante ───────────────────────────
 
 function PoolManagerStep({ onNext, onEligibleChange }) {
-  const [allTeams,  setAllTeams]  = useState([]);
+  const [poolTeams, setPoolTeams] = useState([]);
   const [loading,   setLoading]   = useState(true);
-  const [actionId,  setActionId]  = useState(null); // ID en cours de traitement
+  const [actionId,  setActionId]  = useState(null);
   const [error,     setError]     = useState('');
-  const [addTeamId, setAddTeamId] = useState('');
-  const [adding,    setAdding]    = useState(false);
 
-  const fetchTeams = useCallback(async () => {
+  // Formulaire nouvelle équipe
+  const [p1,      setP1]      = useState('');
+  const [p2,      setP2]      = useState('');
+  const [country, setCountry] = useState('');
+  const [adding,  setAdding]  = useState(false);
+  const [addErr,  setAddErr]  = useState('');
+
+  const fetchPool = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/teams');
-      setAllTeams(res.data || []);
+      // Récupère uniquement les équipes du pool consolante (tournamentPath=null)
+      // puis filtre group≠null côté client
+      const res = await api.get('/teams?tournamentPath=null');
+      setPoolTeams((res.data || []).filter(t => t.group));
     } catch (_) {
-      setError('Impossible de charger les équipes');
+      setError('Impossible de charger le pool');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchTeams(); }, [fetchTeams]);
-
-  // Équipes du pool consolante : group != null ET tournamentPath == null
-  const poolTeams = allTeams.filter(t => t.group && t.tournamentPath === null);
-
-  // Notifier le parent du count pour pré-sélectionner la taille de bracket
+  useEffect(() => { fetchPool(); }, [fetchPool]);
   useEffect(() => { onEligibleChange(poolTeams.length); }, [poolTeams.length, onEligibleChange]);
 
-  const patchPath = async (id, path) => {
+  const handleRetirer = async (id) => {
     setActionId(id);
     setError('');
     try {
-      await api.patch(`/teams/${id}/tournament-path`, { tournamentPath: path });
-      await fetchTeams();
+      await api.patch(`/teams/${id}/tournament-path`, { tournamentPath: 'eliminated' });
+      await fetchPool();
     } catch (err) {
       setError(err.response?.data?.error || 'Erreur');
     } finally {
@@ -355,30 +357,24 @@ function PoolManagerStep({ onNext, onEligibleChange }) {
   };
 
   const handleAdd = async () => {
-    if (!addTeamId) return;
+    if (!p1.trim() || !p2.trim()) { setAddErr('Joueur 1 et Joueur 2 sont requis'); return; }
     setAdding(true);
-    setError('');
+    setAddErr('');
     try {
-      await api.patch(`/teams/${addTeamId}/tournament-path`, { tournamentPath: 'null' });
-      setAddTeamId('');
-      await fetchTeams();
+      await api.post('/teams/consolante-add', { player1: p1, player2: p2, country });
+      setP1(''); setP2(''); setCountry('');
+      await fetchPool();
     } catch (err) {
-      setError(err.response?.data?.error || 'Erreur');
+      setAddErr(err.response?.data?.error || 'Erreur lors de la création');
     } finally {
       setAdding(false);
     }
   };
 
-  const pathLabel = (t) => {
-    if (t.tournamentPath === 'main')       return 'Bracket principal';
-    if (t.tournamentPath === 'consolante') return 'Consolante (poules)';
-    if (t.tournamentPath === 'eliminated') return 'Éliminé';
-    if (!t.tournamentPath && t.group)      return 'Pool consolante';
-    return 'Non assigné';
-  };
-
   const teamLabel = (t) =>
     (t.player1 && t.player2) ? `${t.player1} / ${t.player2}` : t.name;
+
+  const INPUT = 'bg-dark-700 border border-white/10 rounded-lg text-white text-sm px-3 py-2 focus:outline-none focus:border-violet-500/50 placeholder-white/20';
 
   if (loading) return <div className="p-8 text-white/30 text-sm">Chargement...</div>;
 
@@ -398,60 +394,47 @@ function PoolManagerStep({ onNext, onEligibleChange }) {
       )}
 
       {/* Liste du pool */}
-      {poolTeams.length === 0 ? (
-        <div className="text-white/30 text-sm text-center py-6 border border-white/8 rounded-xl">
-          Aucune équipe dans le pool consolante.<br />
-          <span className="text-white/20 text-xs">
-            Générez d'abord le bracket principal pour que les non-qualifiés apparaissent ici.
-          </span>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-xs text-white/40 uppercase tracking-widest mb-1">Pool consolante</p>
-          {poolTeams.map(t => (
+      <div className="space-y-2">
+        <p className="text-xs text-white/40 uppercase tracking-widest">Pool consolante</p>
+        {poolTeams.length === 0 ? (
+          <div className="text-white/30 text-sm text-center py-6 border border-white/8 rounded-xl">
+            Aucune équipe dans le pool.<br />
+            <span className="text-white/20 text-xs">
+              Générez d'abord le bracket principal, ou ajoutez une équipe ci-dessous.
+            </span>
+          </div>
+        ) : (
+          poolTeams.map(t => (
             <div key={t._id}
               className="flex items-center gap-3 bg-dark-700 border border-white/8 rounded-xl px-4 py-2.5">
               <span className="flex-1 text-sm text-white/80 truncate">{teamLabel(t)}</span>
               <button
-                onClick={() => patchPath(t._id, 'main')}
+                onClick={() => handleRetirer(t._id)}
                 disabled={actionId === t._id}
-                title="Remettre dans le bracket principal"
-                className="shrink-0 px-2.5 py-1 rounded-lg text-xs border border-primary-500/30 text-primary-400 hover:bg-primary-500/10 transition-colors disabled:opacity-40">
-                {actionId === t._id ? '...' : 'Bracket'}
-              </button>
-              <button
-                onClick={() => patchPath(t._id, 'eliminated')}
-                disabled={actionId === t._id}
-                title="Retirer du tournoi"
                 className="shrink-0 px-2.5 py-1 rounded-lg text-xs border border-red-500/25 text-red-400/70 hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-40">
-                {actionId === t._id ? '...' : 'Retirer'}
+                {actionId === t._id ? '...' : 'Retirer du pool'}
               </button>
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
 
-      {/* Ajouter une équipe */}
-      <div className="border-t border-white/8 pt-4">
-        <p className="text-xs text-white/40 uppercase tracking-widest mb-2">Ajouter une équipe au pool</p>
-        <div className="flex gap-2">
-          <select value={addTeamId} onChange={e => setAddTeamId(e.target.value)}
-            className="flex-1 bg-dark-700 border border-white/10 rounded-lg text-white text-sm px-3 py-2 focus:outline-none focus:border-violet-500/50">
-            <option value="">-- Choisir une équipe --</option>
-            {allTeams.map(t => (
-              <option key={t._id} value={t._id}>
-                {teamLabel(t)} — {pathLabel(t)}
-              </option>
-            ))}
-          </select>
-          <button onClick={handleAdd} disabled={!addTeamId || adding}
-            className="shrink-0 px-4 py-2 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-40">
-            {adding ? '...' : 'Ajouter'}
-          </button>
+      {/* Formulaire nouvelle équipe */}
+      <div className="border-t border-white/8 pt-4 space-y-3">
+        <p className="text-xs text-white/40 uppercase tracking-widest">Ajouter une nouvelle équipe</p>
+        <div className="grid grid-cols-2 gap-2">
+          <input value={p1} onChange={e => setP1(e.target.value)} placeholder="Joueur 1"
+            className={INPUT} maxLength={60} />
+          <input value={p2} onChange={e => setP2(e.target.value)} placeholder="Joueur 2"
+            className={INPUT} maxLength={60} />
         </div>
-        <p className="text-white/20 text-xs mt-1.5">
-          Toutes les équipes du tournoi — met la sélectionnée dans le pool consolante.
-        </p>
+        <input value={country} onChange={e => setCountry(e.target.value)} placeholder="Pays / Ville (optionnel)"
+          className={`${INPUT} w-full`} maxLength={60} />
+        {addErr && <p className="text-red-400 text-xs">{addErr}</p>}
+        <button onClick={handleAdd} disabled={adding || !p1.trim() || !p2.trim()}
+          className="w-full py-2 rounded-xl text-sm font-medium bg-white/8 border border-white/10 hover:bg-white/12 text-white/70 hover:text-white transition-colors disabled:opacity-40">
+          {adding ? 'Création...' : '+ Ajouter à la consolante'}
+        </button>
       </div>
 
       {/* Confirmer */}

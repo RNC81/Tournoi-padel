@@ -113,6 +113,49 @@ router.post('/assign-numbers', async (req, res) => {
   }
 });
 
+// ─── POST /api/teams/consolante-add ──────────────────────────────────────────
+// Crée une nouvelle équipe directement dans le pool consolante.
+// Lui assigne automatiquement le premier groupe pool principal (phase='pool')
+// afin de satisfaire la contrainte group≠null du wizard consolante.
+// Body : { player1, player2, country? }
+
+router.post('/consolante-add', async (req, res) => {
+  try {
+    const { player1, player2, country } = req.body;
+
+    if (!player1?.trim() || !player2?.trim()) {
+      return res.status(400).json({ error: 'player1 et player2 sont requis' });
+    }
+
+    // Trouver le premier groupe pool principal pour satisfaire group≠null
+    const poolGroup = await Group.findOne({ phase: 'pool' }).sort({ name: 1 });
+    if (!poolGroup) {
+      return res.status(400).json({
+        error: 'Aucune poule principale trouvée — générez d\'abord le bracket principal.',
+      });
+    }
+
+    const p1 = player1.trim();
+    const p2 = player2.trim();
+
+    const team = await Team.create({
+      player1:        p1,
+      player2:        p2,
+      name:           `${p1} / ${p2}`,
+      country:        (country || '').trim(),
+      tournamentPath: null,
+      group:          poolGroup._id,
+    });
+
+    // Ajouter au tableau teams du groupe (cohérence)
+    await Group.findByIdAndUpdate(poolGroup._id, { $push: { teams: team._id } });
+
+    res.status(201).json(team);
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
 // ─── PUT /api/teams/:id ──────────────────────────────────────────────────────
 // Modifier une équipe — mise à jour partielle
 
