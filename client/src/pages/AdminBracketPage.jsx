@@ -667,7 +667,7 @@ export default function AdminBracketPage() {
     try {
       const [phaseResults, teamsRes] = await Promise.all([
         Promise.allSettled(ALL_PHASES.map(p => api.get(`/matches?phase=${p}`))),
-        api.get('/teams').catch(() => ({ data: [] })),
+        api.get('/teams?tournamentPath=main').catch(() => ({ data: [] })),
       ]);
 
       const newByPhase = {};
@@ -677,9 +677,7 @@ export default function AdminBracketPage() {
       });
       setByPhase(newByPhase);
 
-      // Stocker la liste complète des équipes du bracket principal
-      const all = teamsRes.data || [];
-      setMainTeams(all.filter(t => t.tournamentPath === 'main'));
+      setMainTeams(teamsRes.data || []);
     } catch (_) {}
     finally { setLoading(false); }
   }, []);

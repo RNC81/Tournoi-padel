@@ -71,7 +71,12 @@ router.get('/count', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const teams = await Team.find()
+    const filter = {};
+    // Filtre optionnel : ?tournamentPath=main|consolante|eliminated|null
+    if (req.query.tournamentPath !== undefined) {
+      filter.tournamentPath = req.query.tournamentPath === 'null' ? null : req.query.tournamentPath;
+    }
+    const teams = await Team.find(filter)
       .populate('group', 'name')
       .sort({ registeredAt: 1 });
     res.json(teams);
