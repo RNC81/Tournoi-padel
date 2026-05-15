@@ -96,6 +96,50 @@ router.get('/:id', validateObjectId, async (req, res) => {
   }
 });
 
+// ─── PUT /api/matches/:id/teams ──────────────────────────────────────────────
+// Modifier manuellement les équipes d'un match non encore joué.
+// Body : { team1: ObjectId, team2: ObjectId }
+// Bloqué si match.played = true.
+
+router.put('/:id/teams', validateObjectId, async (req, res) => {
+  try {
+    const { team1, team2 } = req.body;
+
+    if (!team1 || !team2) {
+      return res.status(400).json({ error: 'team1 et team2 sont requis' });
+    }
+
+    const match = await Match.findById(req.params.id);
+    if (!match) return res.status(404).json({ error: 'Match introuvable' });
+
+    if (match.played) {
+      return res.status(409).json({ error: 'Impossible de modifier les équipes d\'un match déjà joué. Réinitialisez le score d\'abord.' });
+    }
+
+    const [t1, t2] = await Promise.all([Team.findById(team1), Team.findById(team2)]);
+    if (!t1) return res.status(404).json({ error: 'Équipe 1 introuvable' });
+    if (!t2) return res.status(404).json({ error: 'Équipe 2 introuvable' });
+    if (String(t1._id) === String(t2._id)) {
+      return res.status(400).json({ error: 'Les deux équipes doivent être différentes' });
+    }
+
+    match.team1  = t1._id;
+    match.team2  = t2._id;
+    match.winner = null;
+    match.result = null;
+    await match.save();
+
+    const populated = await Match.findById(match._id)
+      .populate('team1',  'name player1 player2 country teamNumber')
+      .populate('team2',  'name player1 player2 country teamNumber')
+      .populate('winner', 'name');
+
+    res.json(populated);
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
 // ─── PUT /api/matches/:id/score ───────────────────────────────────────────────
 // Saisir ou corriger le score d'un match.
 // Body : { sets: [{ score1, score2 }, ...], result?: 'draw' }
