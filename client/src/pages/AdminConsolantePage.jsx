@@ -311,6 +311,162 @@ function BracketRound({ phase, matches, onScoreClick, containerHeight }) {
   );
 }
 
+// ─── WIZARD : Étape 0 — Gestion du pool consolante ───────────────────────────
+
+function PoolManagerStep({ onNext, onEligibleChange }) {
+  const [allTeams,  setAllTeams]  = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [actionId,  setActionId]  = useState(null); // ID en cours de traitement
+  const [error,     setError]     = useState('');
+  const [addTeamId, setAddTeamId] = useState('');
+  const [adding,    setAdding]    = useState(false);
+
+  const fetchTeams = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/teams');
+      setAllTeams(res.data || []);
+    } catch (_) {
+      setError('Impossible de charger les équipes');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchTeams(); }, [fetchTeams]);
+
+  // Équipes du pool consolante : group != null ET tournamentPath == null
+  const poolTeams = allTeams.filter(t => t.group && t.tournamentPath === null);
+
+  // Notifier le parent du count pour pré-sélectionner la taille de bracket
+  useEffect(() => { onEligibleChange(poolTeams.length); }, [poolTeams.length, onEligibleChange]);
+
+  const patchPath = async (id, path) => {
+    setActionId(id);
+    setError('');
+    try {
+      await api.patch(`/teams/${id}/tournament-path`, { tournamentPath: path });
+      await fetchTeams();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erreur');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!addTeamId) return;
+    setAdding(true);
+    setError('');
+    try {
+      await api.patch(`/teams/${addTeamId}/tournament-path`, { tournamentPath: 'null' });
+      setAddTeamId('');
+      await fetchTeams();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erreur');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const pathLabel = (t) => {
+    if (t.tournamentPath === 'main')       return 'Bracket principal';
+    if (t.tournamentPath === 'consolante') return 'Consolante (poules)';
+    if (t.tournamentPath === 'eliminated') return 'Éliminé';
+    if (!t.tournamentPath && t.group)      return 'Pool consolante';
+    return 'Non assigné';
+  };
+
+  const teamLabel = (t) =>
+    (t.player1 && t.player2) ? `${t.player1} / ${t.player2}` : t.name;
+
+  if (loading) return <div className="p-8 text-white/30 text-sm">Chargement...</div>;
+
+  return (
+    <div className="max-w-lg mx-auto mt-4 space-y-5">
+
+      {/* Compteur */}
+      <div className="bg-dark-700 border border-white/10 rounded-xl px-5 py-4 flex items-center justify-between">
+        <span className="text-white/50 text-sm">Équipes dans le pool consolante</span>
+        <span className="text-white font-bold text-xl">{poolTeams.length}</span>
+      </div>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl px-4 py-3">
+          {error}
+        </div>
+      )}
+
+      {/* Liste du pool */}
+      {poolTeams.length === 0 ? (
+        <div className="text-white/30 text-sm text-center py-6 border border-white/8 rounded-xl">
+          Aucune équipe dans le pool consolante.<br />
+          <span className="text-white/20 text-xs">
+            Générez d'abord le bracket principal pour que les non-qualifiés apparaissent ici.
+          </span>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-white/40 uppercase tracking-widest mb-1">Pool consolante</p>
+          {poolTeams.map(t => (
+            <div key={t._id}
+              className="flex items-center gap-3 bg-dark-700 border border-white/8 rounded-xl px-4 py-2.5">
+              <span className="flex-1 text-sm text-white/80 truncate">{teamLabel(t)}</span>
+              <button
+                onClick={() => patchPath(t._id, 'main')}
+                disabled={actionId === t._id}
+                title="Remettre dans le bracket principal"
+                className="shrink-0 px-2.5 py-1 rounded-lg text-xs border border-primary-500/30 text-primary-400 hover:bg-primary-500/10 transition-colors disabled:opacity-40">
+                {actionId === t._id ? '...' : 'Bracket'}
+              </button>
+              <button
+                onClick={() => patchPath(t._id, 'eliminated')}
+                disabled={actionId === t._id}
+                title="Retirer du tournoi"
+                className="shrink-0 px-2.5 py-1 rounded-lg text-xs border border-red-500/25 text-red-400/70 hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-40">
+                {actionId === t._id ? '...' : 'Retirer'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Ajouter une équipe */}
+      <div className="border-t border-white/8 pt-4">
+        <p className="text-xs text-white/40 uppercase tracking-widest mb-2">Ajouter une équipe au pool</p>
+        <div className="flex gap-2">
+          <select value={addTeamId} onChange={e => setAddTeamId(e.target.value)}
+            className="flex-1 bg-dark-700 border border-white/10 rounded-lg text-white text-sm px-3 py-2 focus:outline-none focus:border-violet-500/50">
+            <option value="">-- Choisir une équipe --</option>
+            {allTeams.map(t => (
+              <option key={t._id} value={t._id}>
+                {teamLabel(t)} — {pathLabel(t)}
+              </option>
+            ))}
+          </select>
+          <button onClick={handleAdd} disabled={!addTeamId || adding}
+            className="shrink-0 px-4 py-2 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-40">
+            {adding ? '...' : 'Ajouter'}
+          </button>
+        </div>
+        <p className="text-white/20 text-xs mt-1.5">
+          Toutes les équipes du tournoi — met la sélectionnée dans le pool consolante.
+        </p>
+      </div>
+
+      {/* Confirmer */}
+      <button
+        onClick={onNext}
+        disabled={poolTeams.length < 4}
+        className="w-full py-3 rounded-xl font-semibold text-sm bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+        {poolTeams.length < 4
+          ? `Minimum 4 équipes requises (${poolTeams.length}/4)`
+          : `Confirmer le pool (${poolTeams.length} équipes) et choisir le format →`}
+      </button>
+    </div>
+  );
+}
+
 // ─── WIZARD : Étape 1 — Choix du format ──────────────────────────────────────
 
 function WizardStep1({ eligibleCount, format, setFormat, bracketTarget, setBracketTarget,
@@ -930,8 +1086,8 @@ export default function AdminConsolantePage() {
   // Toast
   const [toast, setToast] = useState(null);
 
-  // Wizard
-  const [wizardStep,    setWizardStep]    = useState(1);
+  // Wizard — étape 0 = gestion pool, 1 = format, 2 = confirmation
+  const [wizardStep,    setWizardStep]    = useState(0);
   const [format,        setFormat]        = useState('direct');
   const [bracketTarget, setBracketTarget] = useState(8);
   const [numGroups,     setNumGroups]     = useState(3);
@@ -1008,6 +1164,7 @@ export default function AdminConsolantePage() {
         // Pré-sélectionner une taille de bracket sensée
         const suggested = eligible <= 4 ? 4 : eligible <= 8 ? 8 : eligible <= 16 ? 16 : 32;
         setBracketTarget(suggested);
+        setWizardStep(0);
         setPageView('wizard');
       }
     } catch (_) {
@@ -1106,9 +1263,13 @@ export default function AdminConsolantePage() {
       {/* ── WIZARD ────────────────────────────────────────────────────────── */}
       {pageView === 'wizard' && (
         <div>
-          {/* Étapes */}
+          {/* Indicateur d'étapes : 0 → 1 → 2 */}
           <div className="flex items-center gap-3 mb-6">
-            {[1, 2].map(n => (
+            {[
+              { n: 0, label: 'Pool' },
+              { n: 1, label: 'Format' },
+              { n: 2, label: 'Confirmation' },
+            ].map(({ n, label }, i, arr) => (
               <div key={n} className={`flex items-center gap-2 text-sm ${
                 wizardStep === n ? 'text-violet-400' : 'text-white/25'
               }`}>
@@ -1121,11 +1282,22 @@ export default function AdminConsolantePage() {
                 }`}>
                   {n}
                 </span>
-                {n === 1 ? 'Format' : 'Confirmation'}
-                {n < 2 && <span className="text-white/15">→</span>}
+                {label}
+                {i < arr.length - 1 && <span className="text-white/15">→</span>}
               </div>
             ))}
           </div>
+
+          {wizardStep === 0 && (
+            <PoolManagerStep
+              onNext={() => setWizardStep(1)}
+              onEligibleChange={(count) => {
+                setEligibleCount(count);
+                const suggested = count <= 4 ? 4 : count <= 8 ? 8 : count <= 16 ? 16 : 32;
+                setBracketTarget(suggested);
+              }}
+            />
+          )}
 
           {wizardStep === 1 && (
             <WizardStep1

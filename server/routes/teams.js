@@ -143,6 +143,40 @@ router.put('/:id', validateObjectId, async (req, res) => {
   }
 });
 
+// ─── PATCH /api/teams/:id/tournament-path ────────────────────────────────────
+// Modifier uniquement le tournamentPath d'une équipe.
+// Body : { tournamentPath: 'main' | 'consolante' | 'eliminated' | 'null' }
+// La valeur 'null' (string) est convertie en null (valeur DB).
+
+router.patch('/:id/tournament-path', validateObjectId, async (req, res) => {
+  try {
+    const VALID = ['main', 'consolante', 'eliminated', 'null', null];
+    const raw   = req.body.tournamentPath;
+
+    if (raw === undefined) {
+      return res.status(400).json({ error: 'tournamentPath est requis' });
+    }
+    if (!VALID.includes(raw)) {
+      return res.status(400).json({
+        error: 'tournamentPath invalide — valeurs acceptées : main, consolante, eliminated, null',
+      });
+    }
+
+    const tournamentPath = raw === 'null' ? null : raw;
+
+    const team = await Team.findByIdAndUpdate(
+      req.params.id,
+      { $set: { tournamentPath } },
+      { new: true }
+    ).populate('group', 'name');
+
+    if (!team) return res.status(404).json({ error: 'Équipe introuvable' });
+    res.json(team);
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
 // ─── DELETE /api/teams/:id ───────────────────────────────────────────────────
 // Supprimer une équipe
 // Retire la team du Group.teams si elle y est assignée.
