@@ -399,6 +399,31 @@ function TeamSlot({ team, isBye, isWinner, isLoser }) {
 
 // ─── MATCH CARD ───────────────────────────────────────────────────────────────
 
+function TerrainInput({ matchId, initialValue }) {
+  const [value, setValue] = useState(initialValue || '');
+
+  const handleBlur = async () => {
+    try {
+      await api.patch(`/matches/${matchId}/schedule-time`, { scheduledTime: value.trim() || null });
+    } catch {
+      // silencieux — pas bloquant
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      maxLength={10}
+      placeholder="Terrain..."
+      value={value}
+      onChange={e => setValue(e.target.value)}
+      onBlur={handleBlur}
+      onClick={e => e.stopPropagation()}
+      className="w-full bg-transparent text-white/35 text-xs placeholder-white/20 focus:outline-none focus:text-white/70 px-3 py-0.5"
+    />
+  );
+}
+
 function MatchCard({ match, onEditClick, isFinal }) {
   const isByeMatch = match.played && (!match.team1 || !match.team2);
   const isPlayed   = match.played && !isByeMatch;
@@ -412,7 +437,6 @@ function MatchCard({ match, onEditClick, isFinal }) {
   const t1IsWinner = isPlayed && winner && winner === t1id;
   const t2IsWinner = isPlayed && winner && winner === t2id;
 
-  // Toutes les cartes sont cliquables sauf les BYEs
   const clickable = !isByeMatch;
 
   return (
@@ -458,7 +482,7 @@ function MatchCard({ match, onEditClick, isFinal }) {
       )}
 
       {/* Équipe 2 */}
-      <div>
+      <div className={`border-b border-white/5`}>
         <TeamSlot
           team={isByeMatch ? (match.team2 || null) : match.team2}
           isBye={isByeMatch && !match.team2}
@@ -466,6 +490,13 @@ function MatchCard({ match, onEditClick, isFinal }) {
           isLoser={isPlayed && !t2IsWinner && !!match.team2}
         />
       </div>
+
+      {/* Numéro de terrain */}
+      {!isByeMatch && (
+        <div className="border-t border-white/5">
+          <TerrainInput matchId={match._id} initialValue={match.scheduledTime} />
+        </div>
+      )}
     </div>
   );
 }

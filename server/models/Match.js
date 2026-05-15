@@ -58,8 +58,9 @@ const matchSchema = new Schema(
     // null pour les matchs de poule.
     position: { type: Number, default: null },
 
-    scheduledAt: { type: Date, default: null },
-    courtNumber: { type: Number, default: null },
+    scheduledAt:   { type: Date,   default: null },
+    courtNumber:   { type: Number, default: null },
+    scheduledTime: { type: String, default: null, maxlength: 10 },
   },
   { timestamps: true }
 );

@@ -655,6 +655,13 @@ function ReadOnlyMatchCard({ match, isFinal, accent = 'primary' }) {
         </div>
       )}
       <TeamSlot match={match} side={2} isWinner={t2Win} isLoser={isPlayed && !t2Win && !!match.team2} />
+      {match.scheduledTime && (
+        <div className="px-3 py-0.5 border-t border-forest/8">
+          <span className="inline-block bg-lime/20 text-lime-dark text-xs font-medium px-1.5 py-0.5 rounded">
+            {match.scheduledTime}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

@@ -228,6 +228,31 @@ function TeamSlot({ team, isBye, isWinner, isLoser }) {
 
 // ─── BRACKET : MatchCard ──────────────────────────────────────────────────────
 
+function TerrainInput({ matchId, initialValue }) {
+  const [value, setValue] = useState(initialValue || '');
+
+  const handleBlur = async () => {
+    try {
+      await api.patch(`/matches/${matchId}/schedule-time`, { scheduledTime: value.trim() || null });
+    } catch {
+      // silencieux — pas bloquant
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      maxLength={10}
+      placeholder="Terrain..."
+      value={value}
+      onChange={e => setValue(e.target.value)}
+      onBlur={handleBlur}
+      onClick={e => e.stopPropagation()}
+      className="w-full bg-transparent text-white/35 text-xs placeholder-white/20 focus:outline-none focus:text-white/70 px-3 py-0.5"
+    />
+  );
+}
+
 function MatchCard({ match, onScoreClick, isFinal }) {
   const isByeMatch = match.played && (!match.team1 || !match.team2);
   const isPlayed   = match.played && !isByeMatch;
@@ -272,7 +297,7 @@ function MatchCard({ match, onScoreClick, isFinal }) {
           ))}
         </div>
       )}
-      <div>
+      <div className="border-b border-white/5">
         <TeamSlot
           team={isByeMatch ? (match.team2 || null) : match.team2}
           isBye={isByeMatch && !match.team2}
@@ -280,6 +305,11 @@ function MatchCard({ match, onScoreClick, isFinal }) {
           isLoser={isPlayed && !t2Win && !!match.team2}
         />
       </div>
+      {!isByeMatch && (
+        <div className="border-t border-white/5">
+          <TerrainInput matchId={match._id} initialValue={match.scheduledTime} />
+        </div>
+      )}
     </div>
   );
 }

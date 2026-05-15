@@ -259,6 +259,28 @@ router.put('/:id', validateObjectId, async (req, res) => {
   }
 });
 
+// ─── PATCH /api/matches/:id/schedule-time ────────────────────────────────────
+// Sauvegarder le numéro/libellé du terrain (champ texte libre, max 10 car.)
+// Body : { scheduledTime: string | null }
+
+router.patch('/:id/schedule-time', validateObjectId, async (req, res) => {
+  try {
+    const raw = req.body.scheduledTime;
+    const scheduledTime = raw != null ? String(raw).slice(0, 10) : null;
+
+    const match = await Match.findByIdAndUpdate(
+      req.params.id,
+      { $set: { scheduledTime } },
+      { new: true }
+    );
+
+    if (!match) return res.status(404).json({ error: 'Match introuvable' });
+    res.json({ scheduledTime: match.scheduledTime });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur', ...safeError(err) });
+  }
+});
+
 // ─── DELETE /api/matches/:id/score ────────────────────────────────────────────
 // Effacer le score d'un match : remet played à false, vide sets/result/winner.
 // Utile pour corriger une erreur de saisie sur un match de poule.
