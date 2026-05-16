@@ -13,6 +13,7 @@ const matchSchema = new Schema(
         'r32', 'r16', 'qf', 'sf', 'final',
         // Bracket consolante
         'consolante_pool',
+        'consolante_barrage',
         'consolante_r32', 'consolante_r16',
         'consolante_qf', 'consolante_sf', 'consolante_final',
       ],
